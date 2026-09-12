@@ -272,6 +272,7 @@ console.log('Shareable Magnet Link:', magnetUri);
 
 Detailed technical specifications and operational guides are available in the [`docs/`](docs/) directory:
 
+- [**System Architecture & P2P Protocol Guide (`docs/ARCHITECTURE.md`)**](docs/ARCHITECTURE.md) — Comprehensive technical guide detailing the decentralized mesh network, BitTorrent wire protocol implementation, piece streaming, and RenegadeCMM bridge.
 - [**Manifest Specification (`docs/MANIFEST_SPEC.md`)**](docs/MANIFEST_SPEC.md) — Complete specification of the `.swarm` metadata schema, piece sizing formulas, and hash algorithms.
 - [**Signing & Provenance Guide (`docs/SIGNING_GUIDE.md`)**](docs/SIGNING_GUIDE.md) — Guide to generating Ed25519 keys, signing models, and cryptographic verification.
 - [**Web of Trust Guide (`docs/WEB_OF_TRUST.md`)**](docs/WEB_OF_TRUST.md) — Detailed guide on key distribution, trust levels, TOFU verification, and keyring import/export.

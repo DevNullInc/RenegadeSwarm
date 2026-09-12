@@ -81,11 +81,20 @@
 
 ---
 
+### 📖 Documentation Architecture
+
+- **System Architecture & P2P Protocol Guide (`docs/ARCHITECTURE.md`)**:
+  - Authored a comprehensive technical architecture guide covering process boundaries, P2P network discovery (Trackers, BEP 42 DHT, PEX), binary BitTorrent wire protocol framing, 16KB piece pipelining, Tit-for-Tat choking/unchoking, sequence diagrams for seeding and downloading, and the RenegadeCMM SQLite `ATTACH DATABASE` bridge.
+- **Development Changelog (`DEV-CHANGELOG.md`)**:
+  - Implemented rolling developer changelog to track unreleased improvements across version cycles.
+
+---
+
 ### 🧪 Quality Assurance & Testing
 
 - **Comprehensive Test Suite**:
-  - **85/85** automated unit tests passing across **19** test suites in Vitest.
-  - Dedicated test coverage for LLM detection, CivitAI hash checking, SFW vs. NSFW preview filtering, CMM multi-folder routing, and keyring lockout.
+  - **87/87** automated unit tests passing across **19** test suites in Vitest.
+  - Dedicated test coverage for LLM detection, HTML entity sterilization & trigger formatting, CivitAI hash checking, SFW vs. NSFW preview filtering, CMM multi-folder routing, and keyring lockout.
 - **GNU GPL-3.0 License Verification**:
   - Automated license header application across all 58 repository source and test files.
 
