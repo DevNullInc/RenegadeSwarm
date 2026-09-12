@@ -23,7 +23,7 @@ Users have four simple ways to discover, add, and manage creator public keys:
 
 ### 1. Default Root Creators (Pre-Seeded)
 RenegadeSwarm ships with built-in root public keys for the core project maintainers:
-* **TheStygianRenegade** (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`)
+* **TheStygianRenegade** (`70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7`)
 * **DevNullInc** (`af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`)
 
 ### 2. Manual Pinning via Desktop UI
@@ -47,7 +47,7 @@ Communities can curate and share trusted creator lists in JSON format:
 [
   {
     "creatorName": "TheStygianRenegade",
-    "publicKeyHex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "publicKeyHex": "70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7",
     "trustLevel": "VerifiedCreator",
     "notes": "Official RenegadeSwarm root key"
   }

@@ -30,7 +30,7 @@ export interface KeyringEntry {
 export const DEFAULT_TRUSTED_ROOTS: KeyringEntry[] = [
   {
     creatorName: 'TheStygianRenegade',
-    publicKeyHex: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    publicKeyHex: '70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7',
     trustLevel: 'VerifiedCreator',
     alias: 'Renegade Core Team',
     addedAt: 1723456789,

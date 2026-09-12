@@ -22,7 +22,7 @@ Manifests are stored as human-readable JSON files with the `.swarm` extension or
     "modelType": "LORA",
     "baseModel": "Flux.1 D",
     "creator": "TheStygianRenegade",
-    "creatorPublicKey": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "creatorPublicKey": "70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7",
     "nsfw": false,
     "description": "High detail Cyberpunk aesthetics for FLUX.1",
     "tags": ["cyberpunk", "flux", "style"],
@@ -55,7 +55,7 @@ Manifests are stored as human-readable JSON files with the `.swarm` extension or
   ],
   "signature": {
     "algorithm": "ed25519",
-    "publicKey": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "publicKey": "70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7",
     "signature": "3b2c9...",
     "signedPayloadHash": "d4e5f..."
   }

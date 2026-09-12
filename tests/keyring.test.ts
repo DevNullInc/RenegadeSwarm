@@ -32,7 +32,7 @@ describe('Decentralized Keyring & Web-of-Trust Engine (Rule 10)', () => {
 
   it('should verify known creator public keys and mark unknown ones as Community', () => {
     const keyring = new KeyringEngine();
-    const renegadeKey = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    const renegadeKey = '70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7';
 
     const verification = keyring.verifyCreatorKey('TheStygianRenegade', renegadeKey);
     expect(verification.isKnown).toBe(true);
