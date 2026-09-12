@@ -218,7 +218,7 @@ npm run electron:dev
 ```
 
 ### Trusted Creator Setup
-RenegadeSwarm pre-seeds trusted root keys for `@TheStygianRenegade` and `@DevNullInc`. To add your own trusted creators, navigate to **Settings → Trusted Creators & Keyring** in the desktop application or see the [**Web of Trust Guide**](docs/WEB_OF_TRUST.md).
+RenegadeSwarm pre-seeds a trusted root key for `@TheStygianRenegade` (`/dev/null Inc`). To add your own trusted creators, navigate to **Settings → Trusted Creators & Keyring** in the desktop application or see the [**Web of Trust Guide**](docs/WEB_OF_TRUST.md).
 
 ### Running the Test Suite
 
@@ -278,7 +278,9 @@ Detailed technical specifications and operational guides are available in the [`
 - [**Web of Trust Guide (`docs/WEB_OF_TRUST.md`)**](docs/WEB_OF_TRUST.md) — Detailed guide on key distribution, trust levels, TOFU verification, and keyring import/export.
 - [**Troubleshooting Guide (`docs/TROUBLESHOOTING.md`)**](docs/TROUBLESHOOTING.md) — Operational solutions for NAT traversal, quarantine rejections, and CMM database locks.
 - [**Security Policy (`SECURITY.md`)**](SECURITY.md) — Responsible disclosure guidelines, response SLAs, threat boundaries, and researcher safe-harbor terms.
+- [**Privacy Policy & Data Handling Specification (`docs/PRIVACY_POLICY.md`)**](docs/PRIVACY_POLICY.md) — Self-sovereign, zero-telemetry privacy policy detailing local storage, P2P IP disclosures, and GDPR/CCPA user rights.
 - [**Legal Disclaimer & Non-Liability Notice (`docs/LEGAL_DISCLAIMER.md`)**](docs/LEGAL_DISCLAIMER.md) — Comprehensive legal notice regarding decentralized P2P architecture, Betamax doctrine, and limitation of liability.
+- [**DMCA & Copyright Non-Liability Notice (`docs/DMCA_NOTICE.md`)**](docs/DMCA_NOTICE.md) — Statutory notice regarding DMCA § 512 non-hosting status, technical impossibility of P2P takedowns, and Sony-Betamax protections.
 
 ---
 

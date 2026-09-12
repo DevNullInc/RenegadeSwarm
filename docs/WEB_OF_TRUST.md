@@ -22,9 +22,8 @@ Every downloaded or seeded model manifest is evaluated against the local keyring
 Users have four simple ways to discover, add, and manage creator public keys:
 
 ### 1. Default Root Creators (Pre-Seeded)
-RenegadeSwarm ships with built-in root public keys for the core project maintainers:
-* **TheStygianRenegade** (`70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7`)
-* **DevNullInc** (`af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`)
+RenegadeSwarm ships with a built-in root public key for the core project creator:
+* **TheStygianRenegade / /dev/null Inc** (`70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7`)
 
 ### 2. Manual Pinning via Desktop UI
 1. Navigate to **Keyring & Settings → Web of Trust**.

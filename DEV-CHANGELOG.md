@@ -43,7 +43,7 @@
 #### 3. Identity Generation & Web of Trust Keyring Management
 - **Ed25519 Identity Generation**:
   - Allows creators to generate Ed25519 signing keypairs directly in the application.
-  - Implemented anti-abuse cooldown / lockout mechanism (15-minute rate limit stored in encrypted security vault).
+  - Implemented anti-abuse cooldown / lockout mechanism (rate limit stored in encrypted security vault; 24-hour cooldown in production engine).
 - **Interactive Trusted Creator Keyring**:
   - Added per-key deletion with modal confirmation popups (`x` button).
   - Configured default trusted creator key to:
@@ -85,6 +85,10 @@
 
 - **System Architecture & P2P Protocol Guide (`docs/ARCHITECTURE.md`)**:
   - Authored a comprehensive technical architecture guide covering process boundaries, P2P network discovery (Trackers, BEP 42 DHT, PEX), binary BitTorrent wire protocol framing, 16KB piece pipelining, Tit-for-Tat choking/unchoking, sequence diagrams for seeding and downloading, and the RenegadeCMM SQLite `ATTACH DATABASE` bridge.
+- **Privacy Policy & Data Handling Specification (`docs/PRIVACY_POLICY.md`)**:
+  - Published comprehensive privacy policy grounded in zero-telemetry architecture, local-first endpoint storage, transparent BitTorrent IP transmission realities, opt-in model sharing controls, and self-sovereign GDPR/CCPA user rights.
+- **DMCA & Copyright Non-Liability Notice (`docs/DMCA_NOTICE.md`)**:
+  - Published statutory notice detailing DMCA § 512 non-hosting status, technical impossibility of P2P takedowns, Sony-Betamax substantial non-infringing use protections, and proper recourse channels for rights holders.
 - **Development Changelog (`DEV-CHANGELOG.md`)**:
   - Implemented rolling developer changelog to track unreleased improvements across version cycles.
 

@@ -56,7 +56,13 @@ By using, compiling, or running RenegadeSwarm, you acknowledge and agree that:
 
 ---
 
-## 6. Legal Inquiries & Copyright Contact
+## 6. DMCA & Copyright Takedown Notice
+
+RenegadeSwarm developers do not host or store user content and have zero technical capability to effectuate file removals from decentralized peer-to-peer swarms. For detailed statutory information on copyright non-liability, Betamax doctrine protections, and how to contact actual content hosts, see the [**DMCA & Copyright Non-Liability Notice (`docs/DMCA_NOTICE.md`)**](DMCA_NOTICE.md).
+
+---
+
+## 7. Legal Inquiries & Copyright Contact
 
 For formal legal inquiries, licensing questions, or statutory notices, please contact:  
 📧 **`legal@renegadeinc.net`**

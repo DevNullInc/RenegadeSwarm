@@ -125,7 +125,7 @@ console.log('Reason:', trustAssessment.reason);
 RenegadeSwarm uses a multi-layered key discovery and trust architecture:
 
 ### A. Root Keyring
-RenegadeSwarm includes pre-seeded root public keys for verified community organizations (such as `@TheStygianRenegade` and `@DevNullInc`).
+RenegadeSwarm includes a pre-seeded root public key for the core project creator (`@TheStygianRenegade` / `/dev/null Inc`).
 
 ### B. Creator Identity Attestation
 Creators publish their 64-character public key on their official profiles:
