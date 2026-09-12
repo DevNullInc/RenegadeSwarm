@@ -66,3 +66,13 @@ If you encounter unexpected errors:
    - **Windows**: `%APPDATA%\renegade-swarm\logs\`
    - **Linux**: `~/.config/renegade-swarm/logs/`
    - **macOS**: `~/Library/Application Support/renegade-swarm/logs/`
+
+---
+
+## 📬 6. Support, Contact & Bug Reports
+
+If you discover a bug or encounter issues not covered in this guide:
+- **Bug Reports**: Open an issue on GitHub or email 📧 **`bug-report@renegadeinc.net`** with your platform details and logs.
+- **General Inquiries & Community**: Contact 📧 **`contact-us@renegadeinc.net`**
+- **Security Vulnerabilities**: Report confidentially to 📧 **`security@renegadeinc.net`**
+- **Legal & Compliance Inquiries**: Contact 📧 **`legal@renegadeinc.net`**

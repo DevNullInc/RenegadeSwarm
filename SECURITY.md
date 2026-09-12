@@ -45,6 +45,10 @@ If you discover a security vulnerability in RenegadeSwarm, please **do not open 
    If you prefer encrypted communication or cannot use GitHub Advisories, email the core security team at:  
    📧 **`security@renegadeinc.net`** (or PGP-encrypted to key fingerprint listed in maintainer profiles).
 
+> [!NOTE]
+> For standard (non-security) bugs, please open a GitHub issue or email 📧 `bug-report@renegadeinc.net`.  
+> For legal inquiries, contact 📧 `legal@renegadeinc.net`. For general project questions, contact 📧 `contact-us@renegadeinc.net`.
+
 ### Information to Include in Your Report
 
 To help us investigate, triage, and patch the issue quickly, please include:

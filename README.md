@@ -303,6 +303,15 @@ RenegadeSwarm is a neutral distribution protocol. Users are solely and exclusive
 
 ---
 
+## 📬 Contact & Official Channels
+
+- **Bug Reports & Issues**: 📧 [`bug-report@renegadeinc.net`](mailto:bug-report@renegadeinc.net)
+- **General Inquiries & Community**: 📧 [`contact-us@renegadeinc.net`](mailto:contact-us@renegadeinc.net)
+- **Security Vulnerability Disclosures**: 📧 [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
+- **Legal Inquiries & Copyright Notices**: 📧 [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
+
+---
+
 ## 📜 License
 
 Licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). See [`LICENSE`](LICENSE) for details.

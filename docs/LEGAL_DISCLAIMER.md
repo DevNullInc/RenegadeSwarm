@@ -53,3 +53,11 @@ By using, compiling, or running RenegadeSwarm, you acknowledge and agree that:
 1. You are solely and exclusively responsible for the content you choose to create, seed, publish, download, or index.
 2. You must ensure you possess all necessary rights, licenses, and legal permissions to distribute or acquire any data across the network.
 3. You agree to hold harmless and indemnify the developers, contributors, and copyright holders of RenegadeSwarm from any claims, damages, liabilities, or legal actions arising out of your use of the software.
+
+---
+
+## 6. Legal Inquiries & Copyright Contact
+
+For formal legal inquiries, licensing questions, or statutory notices, please contact:  
+📧 **`legal@renegadeinc.net`**
+
