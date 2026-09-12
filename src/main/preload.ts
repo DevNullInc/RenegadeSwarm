@@ -37,6 +37,9 @@ export interface RenegadeSwarmApi {
   getBandwidthStats: () => Promise<any>;
   getCmmModels: () => Promise<any>;
   configureCmmSync: (req: CmmSyncConfigRequest) => Promise<any>;
+  getSharingPolicy: () => Promise<any>;
+  updateSharingPolicy: (settings: any) => Promise<any>;
+  toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<any>;
 }
 
 const api: RenegadeSwarmApi = {
@@ -51,6 +54,9 @@ const api: RenegadeSwarmApi = {
   getBandwidthStats: () => ipcRenderer.invoke('bandwidth:getStats'),
   getCmmModels: () => ipcRenderer.invoke('cmm:getModels'),
   configureCmmSync: (req) => ipcRenderer.invoke('cmm:configureSync', req),
+  getSharingPolicy: () => ipcRenderer.invoke('sharing:getPolicy'),
+  updateSharingPolicy: (settings) => ipcRenderer.invoke('sharing:updatePolicy', settings),
+  toggleModelShare: (req) => ipcRenderer.invoke('sharing:toggleModelShare', req),
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);

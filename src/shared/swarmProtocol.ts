@@ -20,3 +20,4 @@ export * from '../protocol/types';
 export * from '../protocol/validation';
 export * from '../protocol/manifest';
 export * from '../protocol/crypto';
+export * from '../protocol/sharingPolicy';

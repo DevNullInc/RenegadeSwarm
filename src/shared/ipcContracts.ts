@@ -63,6 +63,11 @@ export const CmmSyncConfigRequestSchema = z.object({
   autoImportDownloaded: z.boolean().default(true),
 });
 
+export const ToggleModelShareRequestSchema = z.object({
+  modelId: z.string().min(1),
+  optIn: z.boolean(),
+});
+
 // Response Types
 export interface IpcResponse<T = unknown> {
   success: boolean;
@@ -75,3 +80,4 @@ export type TorrentControlRequest = z.infer<typeof TorrentControlRequestSchema>;
 export type CreateSwarmPackageRequest = z.infer<typeof CreateSwarmPackageRequestSchema>;
 export type BandwidthSettings = z.infer<typeof BandwidthSettingsSchema>;
 export type CmmSyncConfigRequest = z.infer<typeof CmmSyncConfigRequestSchema>;
+export type ToggleModelShareRequest = z.infer<typeof ToggleModelShareRequestSchema>;

@@ -24,6 +24,7 @@ import { CmmSyncView } from './components/CmmSyncView';
 import { BandwidthView } from './components/BandwidthView';
 import { SwarmTorrentStatus } from '../protocol/types';
 import { BandwidthSettings, CreateSwarmPackageRequest } from '../shared/ipcContracts';
+import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../protocol/sharingPolicy';
 import { CmmLocalModelRow } from '../main/cmm/cmmDbBridge';
 
 declare global {
@@ -40,6 +41,9 @@ declare global {
       getBandwidthStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
       getCmmModels: () => Promise<{ success: boolean; data?: CmmLocalModelRow[]; error?: string }>;
       configureCmmSync: (req: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+      getSharingPolicy: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      updateSharingPolicy: (settings: any) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<{ success: boolean; data?: any; error?: string }>;
     };
   }
 }
@@ -57,6 +61,7 @@ export default function App() {
     listenPort: 6881,
     enableDht: true,
   });
+  const [sharingPolicy, setSharingPolicy] = useState<SharingPolicySettings>(DEFAULT_SHARING_POLICY);
   const [downloadSpeedStr, setDownloadSpeedStr] = useState('0 MB/s');
   const [uploadSpeedStr, setUploadSpeedStr] = useState('0 MB/s');
   const [cmmModels, setCmmModels] = useState<CmmLocalModelRow[]>([]);
@@ -143,9 +148,19 @@ export default function App() {
     }
   };
 
+  const fetchSharingPolicy = async () => {
+    if (window.renegadeSwarm) {
+      const res = await window.renegadeSwarm.getSharingPolicy();
+      if (res.success && res.data) {
+        setSharingPolicy(res.data);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchTorrents();
     fetchCmmModels();
+    fetchSharingPolicy();
     const interval = setInterval(fetchTorrents, 1000);
     return () => clearInterval(interval);
   }, []);
@@ -185,6 +200,7 @@ export default function App() {
         throw new Error(res.error || 'Failed to create package');
       }
       fetchTorrents();
+      fetchSharingPolicy();
       return res.data;
     }
     return {} as any;
@@ -218,6 +234,30 @@ export default function App() {
     }
   };
 
+  const handleUpdateSharingPolicy = async (newPolicy: Partial<SharingPolicySettings>) => {
+    if (window.renegadeSwarm) {
+      const res = await window.renegadeSwarm.updateSharingPolicy(newPolicy);
+      if (res.success && res.data) {
+        setSharingPolicy(res.data);
+      }
+    }
+  };
+
+  const handleToggleModelShare = async (modelId: string, optIn: boolean) => {
+    if (window.renegadeSwarm) {
+      const res = await window.renegadeSwarm.toggleModelShare({ modelId, optIn });
+      if (res.success && res.data?.policy) {
+        setSharingPolicy(res.data.policy);
+      }
+    } else {
+      // Local state fallback for mock preview
+      const opted = new Set(sharingPolicy.optedInModelIds);
+      if (optIn) opted.add(modelId);
+      else opted.delete(modelId);
+      setSharingPolicy({ ...sharingPolicy, optedInModelIds: Array.from(opted) });
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', background: 'var(--bg-main)' }}>
       <Navbar
@@ -248,17 +288,21 @@ export default function App() {
             cmmDbPath={cmmDbPath}
             comfyModelsRoot={comfyModelsRoot}
             models={cmmModels}
+            sharingPolicy={sharingPolicy}
             onSyncConfig={handleSyncCmmConfig}
             onRefreshModels={fetchCmmModels}
             onQuickSeed={() => {
               setActiveTab('seeder');
             }}
+            onToggleModelShare={handleToggleModelShare}
           />
         )}
         {activeTab === 'bandwidth' && (
           <BandwidthView
             settings={bandwidthSettings}
+            sharingPolicy={sharingPolicy}
             onUpdateSettings={handleUpdateBandwidth}
+            onUpdateSharingPolicy={handleUpdateSharingPolicy}
           />
         )}
       </main>

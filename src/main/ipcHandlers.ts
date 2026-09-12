@@ -23,10 +23,13 @@ import {
   CreateSwarmPackageRequestSchema,
   BandwidthSettingsSchema,
   CmmSyncConfigRequestSchema,
+  ToggleModelShareRequestSchema,
   IpcResponse,
 } from '../shared/ipcContracts';
+import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
 import { swarmEngine } from './engine/swarmEngine';
 import { bandwidthScheduler } from './engine/bandwidthScheduler';
+import { sharingPolicyManager } from './engine/sharingPolicyManager';
 import { cmmDbBridge } from './cmm/cmmDbBridge';
 import { cmmFolderRouter } from './cmm/cmmFolderRouter';
 
@@ -123,13 +126,26 @@ export function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('cmm:configureSync', async (_, raw: unknown): Promise<IpcResponse> => {
+  // 4. Sharing & Privacy Policy (Opt-In by Default)
+  ipcMain.handle('sharing:getPolicy', async (): Promise<IpcResponse> => {
+    return { success: true, data: sharingPolicyManager.getPolicy() };
+  });
+
+  ipcMain.handle('sharing:updatePolicy', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
-      const validated = CmmSyncConfigRequestSchema.parse(raw);
-      cmmDbBridge.setCmmDbPath(validated.cmmDbPath);
-      cmmFolderRouter.updateConfig({ rootPath: validated.comfyModelsRoot });
-      const connected = await cmmDbBridge.attachCmmDatabase();
-      return { success: connected, data: { dbConnected: connected } };
+      const validated = SharingPolicySettingsSchema.partial().parse(raw);
+      const updated = sharingPolicyManager.updatePolicy(validated);
+      return { success: true, data: updated };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('sharing:toggleModelShare', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { modelId, optIn } = ToggleModelShareRequestSchema.parse(raw);
+      const ok = sharingPolicyManager.toggleModelOptIn(modelId, optIn);
+      return { success: ok, data: { modelId, optIn, policy: sharingPolicyManager.getPolicy() } };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

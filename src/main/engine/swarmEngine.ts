@@ -25,10 +25,12 @@ import {
   AddMagnetRequest,
   CreateSwarmPackageRequest,
 } from '../../shared/ipcContracts';
+import path from 'path';
 import { cmmFolderRouter } from '../cmm/cmmFolderRouter';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
 import { buildSwarmManifest } from './manifestBuilder';
 import { bandwidthScheduler } from './bandwidthScheduler';
+import { sharingPolicyManager } from './sharingPolicyManager';
 
 export class SwarmEngine extends EventEmitter {
   private activeSwarms: Map<string, SwarmTorrentStatus> = new Map();
@@ -92,8 +94,24 @@ export class SwarmEngine extends EventEmitter {
   }
 
   async createPackageAndSeed(req: CreateSwarmPackageRequest): Promise<SwarmManifest> {
+    const shareEvaluation = sharingPolicyManager.evaluatePermission({
+      filePath: req.modelFilePath,
+      fileName: path.basename(req.modelFilePath),
+      modelType: req.modelType,
+      baseModel: req.baseModel,
+      tags: req.tags,
+      isExplicitlyOptedIn: true, // Explicit user package generation
+    });
+
+    if (!shareEvaluation.canShare) {
+      throw new Error(`Sharing Policy Violation: ${shareEvaluation.reason}`);
+    }
+
     const manifest = await buildSwarmManifest(req);
     const infoHash = manifest.hashes.infoHash.toLowerCase();
+
+    // Mark as explicitly opted-in
+    sharingPolicyManager.toggleModelOptIn(infoHash, true);
 
     this.manifests.set(infoHash, manifest);
 
@@ -169,21 +187,29 @@ export class SwarmEngine extends EventEmitter {
         torrent.progressRatio = torrent.downloadedBytes / torrent.totalBytes;
 
         if (torrent.downloadedBytes >= torrent.totalBytes) {
-          torrent.state = 'seeding';
           torrent.progressRatio = 1.0;
           torrent.downloadSpeedBps = 0;
-          torrent.uploadSpeedBps = 4 * 1024 * 1024;
           this.handleDownloadCompleted(infoHash, torrent);
         } else {
           const remainingBytes = torrent.totalBytes - torrent.downloadedBytes;
           torrent.etaSeconds = torrent.downloadSpeedBps > 0 ? Math.ceil(remainingBytes / torrent.downloadSpeedBps) : null;
         }
       } else if (torrent.state === 'seeding') {
-        seedCount++;
-        const ulIncrement = torrent.uploadSpeedBps;
-        torrent.uploadedBytes += ulIncrement;
-        totalUl += ulIncrement;
-        torrent.ratio = torrent.downloadedBytes > 0 ? torrent.uploadedBytes / torrent.downloadedBytes : 1.0;
+        // Evaluate if seeding is still permitted under active policy
+        const isOptedIn = sharingPolicyManager.isModelOptedIn(infoHash);
+        const isBlocked = sharingPolicyManager.isModelBlocked(infoHash);
+        const policy = sharingPolicyManager.getPolicy();
+
+        if (policy.mode === 'disabled' || isBlocked || (policy.mode === 'opt_in_only' && !isOptedIn)) {
+          torrent.state = 'paused';
+          torrent.uploadSpeedBps = 0;
+        } else {
+          seedCount++;
+          const ulIncrement = torrent.uploadSpeedBps;
+          torrent.uploadedBytes += ulIncrement;
+          totalUl += ulIncrement;
+          torrent.ratio = torrent.downloadedBytes > 0 ? torrent.uploadedBytes / torrent.downloadedBytes : 1.0;
+        }
       }
     }
 
@@ -193,6 +219,8 @@ export class SwarmEngine extends EventEmitter {
 
   private async handleDownloadCompleted(infoHash: string, torrent: SwarmTorrentStatus) {
     const manifest = this.manifests.get(infoHash);
+    let targetPath = torrent.savePath;
+
     if (manifest) {
       const mainFile = manifest.files.find((f) => f.fileType === 'Model');
       if (mainFile) {
@@ -204,11 +232,34 @@ export class SwarmEngine extends EventEmitter {
         });
 
         if (dest.isValid) {
+          targetPath = dest.fullPath;
           await cmmDbBridge.registerCompletedDownload(manifest, dest.fullPath);
           torrent.cmmSynced = true;
         }
       }
     }
+
+    // Strict Opt-In Policy Check for Seeding
+    const policy = sharingPolicyManager.getPolicy();
+    const shareCheck = sharingPolicyManager.evaluatePermission({
+      id: infoHash,
+      filePath: targetPath,
+      fileName: path.basename(targetPath),
+      modelType: torrent.modelType,
+      baseModel: torrent.baseModel,
+      tags: manifest?.model?.tags,
+      isExplicitlyOptedIn: policy.optedInModelIds.includes(infoHash),
+    });
+
+    if (policy.autoSeedDownloads && shareCheck.canShare) {
+      torrent.state = 'seeding';
+      torrent.uploadSpeedBps = 4 * 1024 * 1024;
+    } else {
+      // By default: stay completed / paused without uploading
+      torrent.state = 'paused';
+      torrent.uploadSpeedBps = 0;
+    }
+
     this.emit('torrent:completed', torrent);
   }
 }
