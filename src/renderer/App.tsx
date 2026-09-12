@@ -44,6 +44,7 @@ declare global {
         success: boolean;
         data?: {
           connected: boolean;
+          discovered: boolean;
           dbPath: string;
           modelCount: number;
           isProcessRunning: boolean;
@@ -75,6 +76,7 @@ declare global {
       generateIdentity: (creatorName: string) => Promise<{ success: boolean; data?: any; error?: string }>;
       getKeyringLockoutStatus: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').LockoutStatus; error?: string }>;
       generateKeyPair: () => Promise<{ success: boolean; data?: { publicKeyHex: string; privateKeyHex: string }; error?: string }>;
+      openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
     };
   }
 }
@@ -97,11 +99,21 @@ export default function App() {
   const [uploadSpeedStr, setUploadSpeedStr] = useState('0 MB/s');
   const [cmmModels, setCmmModels] = useState<CmmLocalModelRow[]>([]);
   const [cmmConnected, setCmmConnected] = useState(false);
+  const [cmmDiscovered, setCmmDiscovered] = useState(false);
   const [cmmModelCount, setCmmModelCount] = useState(0);
   const [cmmDbPath, setCmmDbPath] = useState('D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [comfyModelsRoot, setComfyModelsRoot] = useState('D:\\ComfyUI\\models');
 
   const [selectedSeederModel, setSelectedSeederModel] = useState<CmmLocalModelRow | null>(null);
+
+  const handleInstallCmm = () => {
+    const releasesUrl = 'https://github.com/DevNullInc/RenegadeCMM/releases';
+    if (window.renegadeSwarm?.openExternal) {
+      window.renegadeSwarm.openExternal(releasesUrl);
+    } else {
+      window.open(releasesUrl, '_blank');
+    }
+  };
 
   const formatSpeed = (bps: number) => {
     if (!bps) return '0 KB/s';
@@ -130,8 +142,10 @@ export default function App() {
         const res = await window.renegadeSwarm.getCmmStatus();
         if (res.success && res.data) {
           const wasConnected = cmmConnected;
-          const isNowConnected = res.data.connected;
+          const isNowConnected = Boolean(res.data.connected);
+          const isNowDiscovered = Boolean(res.data.discovered);
           setCmmConnected(isNowConnected);
+          setCmmDiscovered(isNowDiscovered);
           setCmmModelCount(res.data.modelCount || 0);
 
           if (res.data.dbPath && res.data.dbPath !== cmmDbPath) {
@@ -142,9 +156,13 @@ export default function App() {
           if (!wasConnected && isNowConnected) {
             fetchCmmModels();
           }
+        } else {
+          setCmmConnected(false);
+          setCmmDiscovered(false);
         }
       } catch {
         setCmmConnected(false);
+        setCmmDiscovered(false);
       }
     }
   };
@@ -298,7 +316,9 @@ export default function App() {
         downloadSpeed={downloadSpeedStr}
         uploadSpeed={uploadSpeedStr}
         cmmConnected={cmmConnected}
+        cmmDiscovered={cmmDiscovered}
         cmmModelCount={cmmModelCount}
+        onInstallCmm={handleInstallCmm}
       />
 
       <main style={{ flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
@@ -323,6 +343,8 @@ export default function App() {
             comfyModelsRoot={comfyModelsRoot}
             models={cmmModels}
             sharingPolicy={sharingPolicy}
+            cmmConnected={cmmConnected}
+            cmmDiscovered={cmmDiscovered}
             onSyncConfig={handleSyncCmmConfig}
             onRefreshModels={fetchCmmModels}
             onQuickSeed={(model) => {
@@ -330,6 +352,7 @@ export default function App() {
               setActiveTab('seeder');
             }}
             onToggleModelShare={handleToggleModelShare}
+            onInstallCmm={handleInstallCmm}
           />
         )}
         {activeTab === 'bandwidth' && (

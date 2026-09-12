@@ -25,6 +25,8 @@ import {
   Radio,
   ShieldCheck,
   KeyRound,
+  DownloadCloud,
+  ExternalLink,
 } from 'lucide-react';
 
 export type TabId = 'dashboard' | 'seeder' | 'cmm' | 'bandwidth' | 'settings';
@@ -35,7 +37,9 @@ interface NavbarProps {
   downloadSpeed: string;
   uploadSpeed: string;
   cmmConnected: boolean;
+  cmmDiscovered: boolean;
   cmmModelCount?: number;
+  onInstallCmm?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -44,7 +48,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   downloadSpeed,
   uploadSpeed,
   cmmConnected,
+  cmmDiscovered,
   cmmModelCount = 0,
+  onInstallCmm,
 }) => {
   const tabs = [
     { id: 'dashboard' as TabId, label: 'Swarm Monitor', icon: Activity },
@@ -53,6 +59,15 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'bandwidth' as TabId, label: 'Network & Quotas', icon: Sliders },
     { id: 'settings' as TabId, label: 'Keyring & Settings', icon: KeyRound },
   ];
+
+  const handleInstallClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onInstallCmm) {
+      onInstallCmm();
+    } else {
+      window.open('https://github.com/DevNullInc/RenegadeCMM/releases', '_blank');
+    }
+  };
 
   return (
     <header style={{
@@ -130,36 +145,105 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={() => onSelectTab('cmm')}
-          title={cmmConnected ? `RenegadeCMM Detected & Connected (${cmmModelCount} local models). Click to view.` : 'RenegadeCMM Not Detected. Click to configure path or auto-detect.'}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '11px',
-            padding: '4px 10px',
-            borderRadius: '20px',
-            background: cmmConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
-            color: cmmConnected ? '#10b981' : '#f43f5e',
-            border: `1px solid ${cmmConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <span style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            background: cmmConnected ? '#10b981' : '#f43f5e',
-            boxShadow: cmmConnected ? '0 0 8px #10b981' : 'none',
-            display: 'inline-block',
-          }} />
-          <ShieldCheck size={12} />
-          <span style={{ fontWeight: 600 }}>
-            {cmmConnected ? `CMM Connected (${cmmModelCount})` : 'CMM Offline'}
-          </span>
-        </button>
+        {/* CMM Multi-State Status Badge */}
+        {cmmConnected ? (
+          /* State 1: Connected (Online & Discovered) */
+          <button
+            onClick={() => onSelectTab('cmm')}
+            title={`RenegadeCMM Connected (${cmmModelCount} local models). Click to view bridge.`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: 'rgba(16, 185, 129, 0.12)',
+              color: '#10b981',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: '#10b981',
+              boxShadow: '0 0 8px #10b981',
+              display: 'inline-block',
+            }} />
+            <ShieldCheck size={12} />
+            <span style={{ fontWeight: 600 }}>
+              {`CMM Connected (${cmmModelCount})`}
+            </span>
+          </button>
+        ) : cmmDiscovered ? (
+          /* State 2: Discovered but Offline */
+          <button
+            onClick={() => onSelectTab('cmm')}
+            title="RenegadeCMM discovered on disk, but currently offline. Click to configure connection."
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              background: 'rgba(245, 158, 11, 0.12)',
+              color: '#f59e0b',
+              border: '1px solid rgba(245, 158, 11, 0.3)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: '#f59e0b',
+              display: 'inline-block',
+            }} />
+            <Database size={12} />
+            <span style={{ fontWeight: 600 }}>
+              CMM Offline
+            </span>
+          </button>
+        ) : (
+          /* State 3: Off and Not Discovered / Not Installed */
+          <button
+            onClick={handleInstallClick}
+            title="RenegadeCMM is not detected. Click to download from GitHub Releases."
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(99, 102, 241, 0.18))',
+              color: '#c084fc',
+              border: '1px solid rgba(168, 85, 247, 0.45)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              boxShadow: '0 0 10px rgba(168, 85, 247, 0.2)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = '#a855f7';
+              e.currentTarget.style.boxShadow = '0 0 14px rgba(168, 85, 247, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.45)';
+              e.currentTarget.style.boxShadow = '0 0 10px rgba(168, 85, 247, 0.2)';
+            }}
+          >
+            <DownloadCloud size={13} />
+            <span style={{ fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: '2px' }}>
+              Click here to install CMM
+            </span>
+            <ExternalLink size={11} style={{ opacity: 0.8 }} />
+          </button>
+        )}
       </div>
     </header>
   );

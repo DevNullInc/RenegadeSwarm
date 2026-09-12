@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, shell } from 'electron';
 import {
   AddMagnetRequestSchema,
   TorrentControlRequestSchema,
@@ -26,6 +26,7 @@ import {
   ToggleModelShareRequestSchema,
   KeyringEntrySchema,
   UserIdentitySchema,
+  OpenExternalUrlRequestSchema,
   IpcResponse,
 } from '../shared/ipcContracts';
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
@@ -492,6 +493,16 @@ export function registerIpcHandlers() {
     try {
       const keypair = generateEd25519KeyPair();
       return { success: true, data: keypair };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('shell:openExternal', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { url } = OpenExternalUrlRequestSchema.parse(raw);
+      await shell.openExternal(url);
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

@@ -41,6 +41,7 @@ export interface CmmLocalModelRow {
 
 export interface CmmStatusResult {
   connected: boolean;
+  discovered: boolean;
   dbPath: string;
   modelCount: number;
   isProcessRunning: boolean;
@@ -103,11 +104,13 @@ export class CmmDbBridge {
   async checkCmmStatus(): Promise<CmmStatusResult> {
     const dbPath = this.getCmmDbPath();
     const now = Date.now();
+    const discovered = Boolean(dbPath && fs.existsSync(dbPath));
 
-    if (!dbPath || !fs.existsSync(dbPath)) {
+    if (!discovered) {
       this.isAttached = false;
       this.lastStatusResult = {
         connected: false,
+        discovered: false,
         dbPath: dbPath || '',
         modelCount: 0,
         isProcessRunning: false,
@@ -139,6 +142,7 @@ export class CmmDbBridge {
       if (!ok) {
         this.lastStatusResult = {
           connected: false,
+          discovered: true,
           dbPath,
           modelCount: 0,
           isProcessRunning,
@@ -193,6 +197,7 @@ export class CmmDbBridge {
 
       this.lastStatusResult = {
         connected: true,
+        discovered: true,
         dbPath,
         modelCount,
         isProcessRunning,
@@ -207,6 +212,7 @@ export class CmmDbBridge {
       this.isAttached = false;
       this.lastStatusResult = {
         connected: false,
+        discovered: true,
         dbPath,
         modelCount: 0,
         isProcessRunning: false,

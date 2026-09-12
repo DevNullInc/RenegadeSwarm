@@ -60,6 +60,7 @@ export interface RenegadeSwarmApi {
   generateIdentity: (creatorName: string) => Promise<any>;
   getKeyringLockoutStatus: () => Promise<any>;
   generateKeyPair: () => Promise<any>;
+  openExternal: (url: string) => Promise<any>;
 }
 
 const api: RenegadeSwarmApi = {
@@ -97,6 +98,7 @@ const api: RenegadeSwarmApi = {
   generateIdentity: (creatorName) => ipcRenderer.invoke('keyring:generateIdentity', creatorName),
   getKeyringLockoutStatus: () => ipcRenderer.invoke('keyring:getLockoutStatus'),
   generateKeyPair: () => ipcRenderer.invoke('crypto:generateKeyPair'),
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', { url }),
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);

@@ -102,6 +102,12 @@ export const LockoutStatusSchema = z.object({
   lockoutDurationSeconds: z.number().int().positive(),
 });
 
+export const OpenExternalUrlRequestSchema = z.object({
+  url: z.string().url().refine((u) => u.startsWith('https://') || u.startsWith('http://'), {
+    message: 'Only HTTP and HTTPS URLs are allowed',
+  }),
+});
+
 // Response Types
 export interface IpcResponse<T = unknown> {
   success: boolean;
@@ -118,3 +124,4 @@ export type ToggleModelShareRequest = z.infer<typeof ToggleModelShareRequestSche
 export type KeyringEntryContract = z.infer<typeof KeyringEntrySchema>;
 export type UserIdentity = z.infer<typeof UserIdentitySchema>;
 export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;
+export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema>;

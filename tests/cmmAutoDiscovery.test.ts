@@ -90,6 +90,7 @@ describe('RenegadeCMM Periodic Auto-Discovery & Health Check', () => {
   it('should report connected status and accurate model count when DB exists', async () => {
     const status = await bridge.checkCmmStatus();
     expect(status.connected).toBe(true);
+    expect(status.discovered).toBe(true);
     expect(status.modelCount).toBe(2);
     expect(status.dbPath).toBe(mockCmmDbPath);
     expect(status.lastChecked).toBeGreaterThan(0);
@@ -101,13 +102,15 @@ describe('RenegadeCMM Periodic Auto-Discovery & Health Check', () => {
 
     const status = await bridge.checkCmmStatus();
     expect(status.connected).toBe(true);
+    expect(status.discovered).toBe(true);
     expect(status.isProcessRunning).toBe(true);
   });
 
-  it('should report offline when target database does not exist', async () => {
+  it('should report offline and undiscovered when target database does not exist', async () => {
     const offlineBridge = new CmmDbBridge(localDbPath, '/invalid/nonexistent/renegadecmm.sqlite');
     const status = await offlineBridge.checkCmmStatus();
     expect(status.connected).toBe(false);
+    expect(status.discovered).toBe(false);
     expect(status.modelCount).toBe(0);
     expect(status.isProcessRunning).toBe(false);
     offlineBridge.close();

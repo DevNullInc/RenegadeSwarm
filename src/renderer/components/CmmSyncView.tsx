@@ -17,7 +17,7 @@
  */
 
 import React, { useState } from 'react';
-import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert } from 'lucide-react';
+import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert, DownloadCloud, ExternalLink } from 'lucide-react';
 import { CmmLocalModelRow } from '../../main/cmm/cmmDbBridge';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../../protocol/sharingPolicy';
 
@@ -26,10 +26,13 @@ interface CmmSyncViewProps {
   comfyModelsRoot: string;
   models: CmmLocalModelRow[];
   sharingPolicy?: SharingPolicySettings;
+  cmmConnected?: boolean;
+  cmmDiscovered?: boolean;
   onSyncConfig: (dbPath: string, rootPath: string) => Promise<boolean>;
   onRefreshModels: () => Promise<void>;
   onQuickSeed: (model: CmmLocalModelRow) => void;
   onToggleModelShare?: (modelId: string, optIn: boolean) => Promise<void>;
+  onInstallCmm?: () => void;
 }
 
 export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
@@ -37,10 +40,13 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   comfyModelsRoot,
   models,
   sharingPolicy = DEFAULT_SHARING_POLICY,
+  cmmConnected = false,
+  cmmDiscovered = false,
   onSyncConfig,
   onRefreshModels,
   onQuickSeed,
   onToggleModelShare,
+  onInstallCmm,
 }) => {
   const [dbPathInput, setDbPathInput] = useState(cmmDbPath || 'D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [modelsRootInput, setModelsRootInput] = useState(comfyModelsRoot || 'D:\\ComfyUI\\models');
@@ -93,6 +99,53 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
           Synchronize decentralized swarm downloads with your local library. All local models are <strong>Opt-In by default</strong> to protect your private models.
         </p>
       </div>
+
+      {/* Not Discovered / Not Installed Notice Banner */}
+      {!cmmDiscovered && !cmmConnected && (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(99, 102, 241, 0.12))',
+          border: '1px solid rgba(168, 85, 247, 0.35)',
+          borderRadius: '12px',
+          padding: '14px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '8px',
+              background: 'rgba(168, 85, 247, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <DownloadCloud size={20} color="#c084fc" />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: '#fff', marginBottom: '2px' }}>
+                RenegadeCMM is not detected on this system
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Install RenegadeCMM to automatically catalog checkpoints, LoRAs, and VAEs, and synchronize your ComfyUI models with the swarm.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onInstallCmm}
+            className="btn-primary"
+            style={{ padding: '8px 16px', fontSize: '12px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <DownloadCloud size={14} />
+            <span>Click here to install CMM</span>
+            <ExternalLink size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Configuration Form */}
       <form onSubmit={handleSave} className="glass-panel" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>

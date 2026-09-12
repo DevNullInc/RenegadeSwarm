@@ -37,8 +37,11 @@
 - **Flexible Folder Management**:
   - Added multi-folder overview in Settings with `[CMM Auto]` and `[Custom]` badges.
   - Interactive **(+) Add Folder** and **(x) Remove Folder** controls with deletion confirmation dialogs.
-  - Dedicated **"Set as Default"** action allowing users to route swarm downloads to any discovered ComfyUI model folder.
-  - Updated **Add Magnet** modal on Dashboard with a target folder selector dropdown and browse picker.
+- **Multi-State CMM Connectivity Badge**:
+  - **Connected**: Displays green `CMM Connected (count)` badge with pulse indicator; clicking navigates directly to the CMM Bridge view.
+  - **Discovered Offline**: Displays amber `CMM Offline` badge when local CMM database is discovered on disk but disconnected/offline.
+  - **Not Discovered / Uninstalled**: Dynamically transforms into an interactive gradient action badge: `Click here to install CMM` with external link trigger opening official GitHub Releases.
+  - **Safe External Link Execution**: Added typed `shell:openExternal` IPC handler with strict HTTP/HTTPS URI scheme validation to prevent malicious protocol handler exploits.
 
 #### 3. Identity Generation & Web of Trust Keyring Management
 - **Ed25519 Identity Generation**:

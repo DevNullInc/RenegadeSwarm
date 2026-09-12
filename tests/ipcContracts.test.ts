@@ -21,6 +21,7 @@ import {
   AddMagnetRequestSchema,
   CreateSwarmPackageRequestSchema,
   BandwidthSettingsSchema,
+  OpenExternalUrlRequestSchema,
 } from '../src/shared/ipcContracts';
 
 describe('IPC Validation Contracts', () => {
@@ -79,5 +80,16 @@ describe('IPC Validation Contracts', () => {
     };
     const validResult = BandwidthSettingsSchema.safeParse(validSettings);
     expect(validResult.success).toBe(true);
+  });
+
+  it('should validate OpenExternalUrlRequestSchema strictly for HTTP/HTTPS', () => {
+    // Valid HTTPS / HTTP
+    expect(OpenExternalUrlRequestSchema.safeParse({ url: 'https://github.com/DevNullInc/RenegadeCMM/releases' }).success).toBe(true);
+    expect(OpenExternalUrlRequestSchema.safeParse({ url: 'http://example.com' }).success).toBe(true);
+
+    // Invalid protocols (file:, javascript:, data:, etc.)
+    expect(OpenExternalUrlRequestSchema.safeParse({ url: 'file:///C:/Windows/System32/calc.exe' }).success).toBe(false);
+    expect(OpenExternalUrlRequestSchema.safeParse({ url: 'javascript:alert(1)' }).success).toBe(false);
+    expect(OpenExternalUrlRequestSchema.safeParse({ url: 'not-a-valid-url' }).success).toBe(false);
   });
 });
