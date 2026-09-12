@@ -17,8 +17,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { ModelMetadataExtractor } from '../src/main/metadata/modelMetadataExtractor';
-import { sharingPolicyManager } from '../src/main/engine/sharingPolicyManager';
+import { ModelMetadataExtractor, sanitizeAndDecodeHtml } from '../src/main/metadata/modelMetadataExtractor';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -128,6 +127,63 @@ describe('ModelMetadataExtractor Engine', () => {
     fetchSpy.mockRestore();
   });
 
+  it('should sanitize and thoroughly decode HTML entities in description and prompt text', () => {
+    // Exact user case: LoRA trigger format with entities
+    const rawLoraNotes = 'rlbtyc1tr0n, &lt;lora:R3alB3auty_ANIMAv1_v2:1.0&gt;,';
+    expect(sanitizeAndDecodeHtml(rawLoraNotes)).toBe('rlbtyc1tr0n, <lora:R3alB3auty_ANIMAv1_v2:1.0>,');
+
+    // Rich HTML formatting, paragraphs, breaks, and entities
+    const richHtml = '<p>Recommended settings:<br>CFG: 3.5 &amp; Steps: 25</p><div>Trigger: &lt;lora:my_model:0.8&gt; &#39;test&#39;</div>';
+    const cleaned = sanitizeAndDecodeHtml(richHtml);
+    expect(cleaned).toContain('Recommended settings:\nCFG: 3.5 & Steps: 25');
+    expect(cleaned).toContain("Trigger: <lora:my_model:0.8> 'test'");
+
+    // Decimal and Hex numeric entities
+    expect(sanitizeAndDecodeHtml('&#60;hello&#62; &#x26; &#34;world&#34;')).toBe('<hello> & "world"');
+
+    // Doubly-encoded entities
+    expect(sanitizeAndDecodeHtml('&amp;lt;lora:double_encoded:1.0&amp;gt;')).toBe('<lora:double_encoded:1.0>');
+  });
+
+  it('should query CivitAI and sterilize HTML entities in description, title, and trainedWords', async () => {
+    const mockCivitaiResponse = {
+      modelId: 5555,
+      id: 6666,
+      name: 'v2.0',
+      description: '<p>rlbtyc1tr0n, &lt;lora:R3alB3auty_ANIMAv1_v2:1.0&gt;,</p>',
+      trainedWords: ['rlbtyc1tr0n', '&lt;lora:R3alB3auty_ANIMAv1_v2:1.0&gt;'],
+      baseModel: 'SDXL 1.0',
+      model: {
+        name: 'Real &amp; Beauty',
+        type: 'LORA',
+        creator: { username: 'Stygian &amp; Co' },
+        tags: [{ name: 'realism &amp; photo' }],
+      },
+      images: [
+        { url: 'https://civitai.com/preview-sfw.jpg', nsfw: false, nsfwLevel: 1 },
+      ],
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockCivitaiResponse,
+    } as any);
+
+    const res = await extractor.fetchCivitaiMetadataByHash('hash1234567890abcdef', false);
+    expect(res).not.toBeNull();
+    expect(res?.modelName).toBe('Real & Beauty');
+    expect(res?.creator).toBe('Stygian & Co');
+    expect(res?.tags).toEqual(['realism & photo']);
+    expect(res?.trainedWords).toEqual(['rlbtyc1tr0n', '<lora:R3alB3auty_ANIMAv1_v2:1.0>']);
+    // Description should be completely sterilized of HTML tags and &lt; entities
+    expect(res?.description).toBe('rlbtyc1tr0n, <lora:R3alB3auty_ANIMAv1_v2:1.0>,');
+    expect(res?.description).not.toContain('&lt;');
+    expect(res?.description).not.toContain('&gt;');
+    expect(res?.description).not.toContain('<p>');
+
+    fetchSpy.mockRestore();
+  });
+
   it('should query CivitAI and filter out NSFW preview images when allowNsfwSharing is false', async () => {
     const mockCivitaiResponse = {
       modelId: 12345,
@@ -152,7 +208,6 @@ describe('ModelMetadataExtractor Engine', () => {
       json: async () => mockCivitaiResponse,
     } as any);
 
-    // Test with allowNsfw = false
     const resSfw = await extractor.fetchCivitaiMetadataByHash('abcdef1234567890abcdef1234567890', false);
     expect(resSfw).not.toBeNull();
     expect(resSfw?.creator).toBe('AIArtistPro');

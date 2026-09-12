@@ -25,6 +25,10 @@
   - When `allowNsfwSharing` is `false` (default), only preview images where `nsfw === false` and `nsfwLevel <= 1` (`None`, `PG`, `SFW`) are fetched.
   - If a model on CivitAI only contains NSFW preview images, the preview asset is rejected.
   - Downloaded SFW previews are cached locally to `~/.renegadeswarm/previews/<hash>.jpg` and auto-populated as `previewFilePath`.
+- **Text Sterilization & Multi-Pass HTML Entity Decoding (`sanitizeAndDecodeHtml`)**:
+  - Automatically converts block elements (`<p>`, `<br>`, `<li>`, `<div>`, `<h1>`-`<h6>`) to clean newlines and bullet formatting.
+  - Recursively decodes named (`&lt;`, `&gt;`, `&amp;`, `&quot;`, `&#39;`, `&nbsp;`), decimal (`&#60;`), and hexadecimal (`&#x3c;`) HTML entities in generation notes, trigger words, model titles, creator names, and tags.
+  - Properly formats LoRA prompts and trigger syntax (e.g. `rlbtyc1tr0n, <lora:R3alB3auty_ANIMAv1_v2:1.0>,`).
 
 #### 2. Multi-Folder RenegadeCMM Sync & Download Routing
 - **CMM Database Synchronization**:

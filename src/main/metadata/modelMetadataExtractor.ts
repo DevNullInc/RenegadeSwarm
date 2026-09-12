@@ -42,6 +42,105 @@ export interface ExtractedModelMetadata {
   isLlm?: boolean;
 }
 
+/**
+ * Sanitizes incoming HTML text, converts breaks/paragraphs to clean newlines,
+ * strips all remaining HTML tags, and thoroughly decodes all HTML entities into plaintext.
+ */
+export function sanitizeAndDecodeHtml(rawText?: string): string {
+  if (!rawText || typeof rawText !== 'string') return '';
+
+  let text = rawText;
+
+  // 1. Convert common break/block tags to appropriate newlines and list bullets
+  text = text
+    .replace(/<br\s*[\/]?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<li>/gi, '• ')
+    .replace(/<\/h[1-6]>/gi, '\n\n');
+
+  // 2. Strip all remaining HTML tags
+  text = text.replace(/<[^>]*>?/gm, '');
+
+  // 3. Named HTML Entities map
+  const namedEntities: Record<string, string> = {
+    '&lt;': '<',
+    '&gt;': '>',
+    '&amp;': '&',
+    '&quot;': '"',
+    '&#39;': "'",
+    '&apos;': "'",
+    '&nbsp;': ' ',
+    '&ndash;': '–',
+    '&mdash;': '—',
+    '&hellip;': '…',
+    '&copy;': '©',
+    '&reg;': '®',
+    '&trade;': '™',
+    '&laquo;': '«',
+    '&raquo;': '»',
+    '&bull;': '•',
+    '&ldquo;': '"',
+    '&rdquo;': '"',
+    '&lsquo;': "'",
+    '&rsquo;': "'",
+  };
+
+  // Perform multiple decoding passes to resolve doubly encoded entities (e.g., &amp;lt; -> &lt; -> <)
+  for (let pass = 0; pass < 3; pass++) {
+    let replaced = false;
+
+    for (const [entity, char] of Object.entries(namedEntities)) {
+      if (text.includes(entity)) {
+        text = text.replaceAll(entity, char);
+        replaced = true;
+      }
+    }
+
+    // Decimal entities: &#60; -> <, &#39; -> '
+    if (text.includes('&#')) {
+      const nextText = text.replace(/&#(\d+);/g, (_, dec) => {
+        try {
+          const code = parseInt(dec, 10);
+          return String.fromCharCode(code);
+        } catch {
+          return '';
+        }
+      });
+      if (nextText !== text) {
+        text = nextText;
+        replaced = true;
+      }
+
+      // Hex entities: &#x3c; -> <, &#x27; -> '
+      const nextHexText = text.replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+        try {
+          const code = parseInt(hex, 16);
+          return String.fromCharCode(code);
+        } catch {
+          return '';
+        }
+      });
+      if (nextHexText !== text) {
+        text = nextHexText;
+        replaced = true;
+      }
+    }
+
+    if (!replaced) break;
+  }
+
+  // 4. Clean up excessive consecutive newlines and normalize whitespace
+  text = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
 export class ModelMetadataExtractor {
   /**
    * Identifies whether a given model file or specification is an LLM (Large Language Model)
@@ -164,12 +263,16 @@ export class ModelMetadataExtractor {
       try {
         const headerMeta = await this.readSafetensorsMetadata(resolvedPath);
         if (headerMeta) {
-          if (headerMeta.title) title = headerMeta.title;
-          if (headerMeta.author) creator = headerMeta.author;
+          if (headerMeta.title) title = sanitizeAndDecodeHtml(headerMeta.title);
+          if (headerMeta.author) creator = sanitizeAndDecodeHtml(headerMeta.author);
           if (headerMeta.version) version = headerMeta.version;
-          if (headerMeta.architecture || headerMeta.baseModel) baseModel = headerMeta.architecture || headerMeta.baseModel;
-          if (headerMeta.description) description = headerMeta.description;
-          if (headerMeta.tags && Array.isArray(headerMeta.tags)) tags = headerMeta.tags;
+          if (headerMeta.architecture || headerMeta.baseModel) {
+            baseModel = sanitizeAndDecodeHtml(headerMeta.architecture || headerMeta.baseModel);
+          }
+          if (headerMeta.description) description = sanitizeAndDecodeHtml(headerMeta.description);
+          if (headerMeta.tags && Array.isArray(headerMeta.tags)) {
+            tags = headerMeta.tags.map((t: string) => sanitizeAndDecodeHtml(t)).filter(Boolean);
+          }
           if (headerMeta.modelType) modelType = headerMeta.modelType;
         }
       } catch {
@@ -185,7 +288,7 @@ export class ModelMetadataExtractor {
       );
 
       if (matched) {
-        if (!title && matched.civitai_name) title = matched.civitai_name;
+        if (!title && matched.civitai_name) title = sanitizeAndDecodeHtml(matched.civitai_name);
         if (matched.civitai_model_id) civitaiModelId = matched.civitai_model_id;
         if (matched.civitai_version_id) civitaiVersionId = matched.civitai_version_id;
         if (matched.hf_repo_id) hfRepoId = matched.hf_repo_id;
@@ -225,9 +328,10 @@ export class ModelMetadataExtractor {
               civitaiInfo.versionName && !civitaiInfo.modelName.includes(civitaiInfo.versionName)
                 ? `${civitaiInfo.modelName} (${civitaiInfo.versionName})`
                 : civitaiInfo.modelName;
+            title = sanitizeAndDecodeHtml(title);
           }
-          if (civitaiInfo.creator && !creator) creator = civitaiInfo.creator;
-          if (civitaiInfo.baseModel && !baseModel) baseModel = civitaiInfo.baseModel;
+          if (civitaiInfo.creator && !creator) creator = sanitizeAndDecodeHtml(civitaiInfo.creator);
+          if (civitaiInfo.baseModel && !baseModel) baseModel = sanitizeAndDecodeHtml(civitaiInfo.baseModel);
           if (civitaiInfo.modelType) modelType = this.normalizeModelType(civitaiInfo.modelType);
           if (civitaiInfo.modelId) civitaiModelId = civitaiInfo.modelId;
           if (civitaiInfo.versionId) civitaiVersionId = civitaiInfo.versionId;
@@ -423,6 +527,7 @@ export class ModelMetadataExtractor {
     baseModel?: string;
     description?: string;
     tags?: string[];
+    trainedWords?: string[];
     previewImageUrl?: string;
   } | null> {
     const controller = new AbortController();
@@ -438,18 +543,45 @@ export class ModelMetadataExtractor {
 
       const data: any = await response.json();
 
-      // Extract tags
+      // Extract and sanitize tags
       const rawTags = data.model?.tags || data.tags;
       const extractedTags: string[] = [];
       if (Array.isArray(rawTags)) {
         for (const t of rawTags) {
-          if (typeof t === 'string' && t.trim()) {
-            extractedTags.push(t.trim());
-          } else if (t && typeof t.name === 'string' && t.name.trim()) {
-            extractedTags.push(t.name.trim());
-          } else if (t && t.tag && typeof t.tag.name === 'string' && t.tag.name.trim()) {
-            extractedTags.push(t.tag.name.trim());
+          let tagStr = '';
+          if (typeof t === 'string') tagStr = t;
+          else if (t && typeof t.name === 'string') tagStr = t.name;
+          else if (t && t.tag && typeof t.tag.name === 'string') tagStr = t.tag.name;
+
+          const cleanTag = sanitizeAndDecodeHtml(tagStr);
+          if (cleanTag) extractedTags.push(cleanTag);
+        }
+      }
+
+      // Extract and sanitize trained / trigger words
+      const rawTrained = data.trainedWords || data.model?.trainedWords;
+      const trainedWords: string[] = [];
+      if (Array.isArray(rawTrained)) {
+        for (const w of rawTrained) {
+          if (typeof w === 'string') {
+            const cleanWord = sanitizeAndDecodeHtml(w);
+            if (cleanWord) trainedWords.push(cleanWord);
           }
+        }
+      }
+
+      // Extract and sanitize description / generation notes
+      let cleanDesc = sanitizeAndDecodeHtml(data.description);
+      if (!cleanDesc && data.model?.description) {
+        cleanDesc = sanitizeAndDecodeHtml(data.model.description);
+      }
+
+      // Prepend trained words if available and not already in description text
+      let finalDescription = cleanDesc;
+      if (trainedWords.length > 0) {
+        const triggerLine = trainedWords.join(', ');
+        if (!finalDescription || !finalDescription.includes(trainedWords[0])) {
+          finalDescription = finalDescription ? `${triggerLine}\n\n${finalDescription}` : triggerLine;
         }
       }
 
@@ -479,13 +611,14 @@ export class ModelMetadataExtractor {
       return {
         modelId: data.modelId,
         versionId: data.id,
-        modelName: data.model?.name,
-        versionName: data.name,
-        creator: data.model?.creator?.username,
+        modelName: sanitizeAndDecodeHtml(data.model?.name),
+        versionName: sanitizeAndDecodeHtml(data.name),
+        creator: sanitizeAndDecodeHtml(data.model?.creator?.username),
         modelType: data.model?.type,
-        baseModel: data.baseModel,
-        description: data.description ? data.description.replace(/<[^>]*>?/gm, '').trim() : undefined,
+        baseModel: sanitizeAndDecodeHtml(data.baseModel),
+        description: finalDescription,
         tags: extractedTags,
+        trainedWords,
         previewImageUrl,
       };
     } catch {
