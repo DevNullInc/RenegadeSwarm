@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { app, BrowserWindow, Menu, shell } from 'electron';
+import { app, BrowserWindow, Menu, dialog, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { trayManager } from './tray';
@@ -83,11 +83,33 @@ async function createWindow() {
     return { action: 'deny' };
   });
 
-  mainWindow.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault();
-      mainWindow?.hide();
+  mainWindow.on('close', async (event) => {
+    if (isQuitting) return;
+
+    event.preventDefault();
+
+    if (!mainWindow) return;
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Minimize to Tray', 'Exit Application', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      noLink: true,
+      title: 'RenegadeSwarm',
+      message: 'Close Window Options',
+      detail: 'Would you like to keep RenegadeSwarm running in the system tray for seeding and downloads, or exit the application completely?',
+    });
+
+    if (response === 0) {
+      // Minimize to Tray
+      mainWindow.hide();
+    } else if (response === 1) {
+      // Exit Application
+      isQuitting = true;
+      app.quit();
     }
+    // If response === 2 (Cancel), do nothing and keep window open
   });
 
   trayManager.init(mainWindow);

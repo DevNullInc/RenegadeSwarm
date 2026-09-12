@@ -31,3 +31,4 @@ Thumbs.db
 # Scratch & temporary artifacts
 scratch/
 temp/
+scripts/generate-placeholder-icons.js
