@@ -268,6 +268,7 @@ Detailed technical specifications and operational guides are available in the [`
 - [**Signing & Provenance Guide (`docs/SIGNING_GUIDE.md`)**](docs/SIGNING_GUIDE.md) — Guide to generating Ed25519 keys, signing models, and cryptographic verification.
 - [**Web of Trust Guide (`docs/WEB_OF_TRUST.md`)**](docs/WEB_OF_TRUST.md) — Detailed guide on key distribution, trust levels, TOFU verification, and keyring import/export.
 - [**Troubleshooting Guide (`docs/TROUBLESHOOTING.md`)**](docs/TROUBLESHOOTING.md) — Operational solutions for NAT traversal, quarantine rejections, and CMM database locks.
+- [**Security Policy (`SECURITY.md`)**](SECURITY.md) — Responsible disclosure guidelines, response SLAs, threat boundaries, and researcher safe-harbor terms.
 - [**Legal Disclaimer & Non-Liability Notice (`docs/LEGAL_DISCLAIMER.md`)**](docs/LEGAL_DISCLAIMER.md) — Comprehensive legal notice regarding decentralized P2P architecture, Betamax doctrine, and limitation of liability.
 
 ---
