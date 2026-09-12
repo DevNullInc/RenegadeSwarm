@@ -410,6 +410,132 @@ export class CmmDbBridge {
     });
   }
 
+  async updateModelMetadata(data: {
+    filePath: string;
+    fileName?: string;
+    sha256?: string;
+    civitaiModelId?: number;
+    civitaiVersionId?: number;
+    civitaiName?: string;
+    creator?: string;
+    modelType?: string;
+    baseModel?: string;
+    description?: string;
+    tags?: string[];
+    previewUrl?: string;
+    source?: string;
+    hfRepoId?: string;
+    hfCommitSha?: string;
+    quantization?: string;
+    rawJson?: string;
+  }): Promise<boolean> {
+    if (!this.isAttached) {
+      const ok = await this.attachCmmDatabase();
+      if (!ok) return false;
+    }
+
+    const normalizedPath = path.resolve(data.filePath);
+    const fileName = data.fileName || path.basename(normalizedPath);
+
+    // 1. Update cmm.local_models dynamically based on existing schema
+    const columns = await new Promise<string[]>((resolve) => {
+      this.localDb?.all('PRAGMA cmm.table_info(local_models);', (err, rows: any[]) => {
+        if (err || !Array.isArray(rows)) resolve([]);
+        else resolve(rows.map((r) => r.name));
+      });
+    });
+
+    const setClauses: string[] = [];
+    const params: any[] = [];
+
+    const fieldMap: Record<string, any> = {
+      sha256: data.sha256,
+      civitai_model_id: data.civitaiModelId,
+      civitai_version_id: data.civitaiVersionId,
+      civitai_name: data.civitaiName,
+      model_type: data.modelType,
+      preview_url: data.previewUrl,
+      source: data.source || (data.civitaiModelId ? 'civitai' : data.hfRepoId ? 'huggingface' : undefined),
+      hf_repo_id: data.hfRepoId,
+      hf_commit_sha: data.hfCommitSha,
+      quantization: data.quantization,
+    };
+
+    for (const [col, val] of Object.entries(fieldMap)) {
+      if (val !== undefined && (columns.length === 0 || columns.includes(col))) {
+        setClauses.push(`${col} = COALESCE(?, ${col})`);
+        params.push(val);
+      }
+    }
+
+    if (setClauses.length > 0) {
+      const updateLocalSql = `
+        UPDATE cmm.local_models
+        SET ${setClauses.join(', ')}
+        WHERE LOWER(file_path) = LOWER(?) OR LOWER(file_path) = LOWER(?) OR file_name = ?;
+      `;
+      params.push(normalizedPath, normalizedPath.replace(/\\/g, '/'), fileName);
+
+      await new Promise<void>((resolve) => {
+        this.localDb?.run(updateLocalSql, params, () => resolve());
+      });
+    }
+
+    // 2. If CivitAI Model ID is present, update cmm.civitai_models table if it exists
+    if (data.civitaiModelId) {
+      const upsertCivitaiModelSql = `
+        INSERT INTO cmm.civitai_models (id, name, type, creator_username, fetched_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          name = COALESCE(excluded.name, civitai_models.name),
+          type = COALESCE(excluded.type, civitai_models.type),
+          creator_username = COALESCE(excluded.creator_username, civitai_models.creator_username),
+          fetched_at = CURRENT_TIMESTAMP;
+      `;
+      await new Promise<void>((resolve) => {
+        this.localDb?.run(
+          upsertCivitaiModelSql,
+          [
+            data.civitaiModelId,
+            data.civitaiName || fileName,
+            data.modelType || 'Checkpoint',
+            data.creator || null,
+          ],
+          () => resolve()
+        );
+      });
+    }
+
+    // 3. If CivitAI Version ID is present, update cmm.civitai_versions table if it exists
+    if (data.civitaiVersionId && data.civitaiModelId) {
+      const upsertCivitaiVersionSql = `
+        INSERT INTO cmm.civitai_versions (id, model_id, name, base_model, sha256, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = COALESCE(excluded.name, civitai_versions.name),
+          base_model = COALESCE(excluded.base_model, civitai_versions.base_model),
+          sha256 = COALESCE(excluded.sha256, civitai_versions.sha256),
+          raw_json = COALESCE(excluded.raw_json, civitai_versions.raw_json);
+      `;
+      await new Promise<void>((resolve) => {
+        this.localDb?.run(
+          upsertCivitaiVersionSql,
+          [
+            data.civitaiVersionId,
+            data.civitaiModelId,
+            data.civitaiName || fileName,
+            data.baseModel || null,
+            data.sha256 || null,
+            data.rawJson || null,
+          ],
+          () => resolve()
+        );
+      });
+    }
+
+    return true;
+  }
+
   async close() {
     if (this.localDb) {
       if (this.isAttached) {

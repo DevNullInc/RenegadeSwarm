@@ -317,10 +317,11 @@ export class ModelMetadataExtractor {
     }
 
     // 5. If NOT an LLM and SHA256 hash is available, check CivitAI registry
+    let civitaiInfo: any = null;
     if (!isLlm && sha256) {
       try {
         const allowNsfw = sharingPolicyManager.getPolicy().allowNsfwSharing;
-        const civitaiInfo = await this.fetchCivitaiMetadataByHash(sha256, allowNsfw);
+        civitaiInfo = await this.fetchCivitaiMetadataByHash(sha256, allowNsfw);
 
         if (civitaiInfo) {
           if (civitaiInfo.modelName) {
@@ -354,9 +355,55 @@ export class ModelMetadataExtractor {
       }
     }
 
-    // 6. Fallback: Format clean title from filename if title still empty
+    // 6. If creator or tags are still missing, or if model is an LLM or has HF repo, check Hugging Face
+    if (!creator || tags.length === 0 || isLlm || hfRepoId) {
+      try {
+        const hfQuery = hfRepoId || path.parse(fileName).name;
+        const hfInfo = await this.fetchHuggingFaceMetadata(hfQuery);
+        if (hfInfo) {
+          if (hfInfo.creator && !creator) creator = hfInfo.creator;
+          if (hfInfo.tags && hfInfo.tags.length > 0) {
+            tags = Array.from(new Set([...tags, ...hfInfo.tags]));
+          }
+          if (hfInfo.baseModel && !baseModel) baseModel = hfInfo.baseModel;
+          if (hfInfo.description && !description) description = hfInfo.description;
+          if (hfInfo.modelType && (!modelType || modelType === 'Checkpoint')) modelType = hfInfo.modelType;
+          if (hfInfo.hfRepoId && !hfRepoId) hfRepoId = hfInfo.hfRepoId;
+          if (!title || title === this.formatTitleFromFileName(fileName)) {
+            if (hfInfo.modelName) title = this.formatTitleFromFileName(hfInfo.modelName);
+          }
+        }
+      } catch {
+        // HuggingFace lookup failed or offline
+      }
+    }
+
+    // 7. Fallback: Format clean title from filename if title still empty
     if (!title) {
       title = this.formatTitleFromFileName(fileName);
+    }
+
+    // 8. Auto-synchronize and write-back newly enriched metadata to RenegadeCMM SQLite database
+    try {
+      await cmmDbBridge.updateModelMetadata({
+        filePath: resolvedPath,
+        fileName,
+        sha256,
+        civitaiModelId,
+        civitaiVersionId,
+        civitaiName: title,
+        creator,
+        modelType: modelType || (isLlm ? 'LLM' : 'Checkpoint'),
+        baseModel: baseModel || this.guessBaseModel(fileName),
+        description,
+        tags,
+        previewUrl: civitaiInfo?.previewImageUrl,
+        source: civitaiModelId ? 'civitai' : hfRepoId ? 'huggingface' : undefined,
+        hfRepoId,
+        rawJson: civitaiInfo ? JSON.stringify(civitaiInfo) : undefined,
+      });
+    } catch {
+      // Gracefully ignore if CMM DB is locked or detached
     }
 
     return {
@@ -476,14 +523,14 @@ export class ModelMetadataExtractor {
 
   private normalizeModelType(rawType: string): string {
     const t = rawType.toLowerCase();
+    if (t.includes('llm') || t.includes('chat') || t.includes('instruct') || t.includes('text-generation') || t.includes('language')) return 'LLM';
     if (t.includes('lora')) return 'LORA';
     if (t.includes('checkpoint') || t.includes('model')) return 'Checkpoint';
     if (t.includes('unet')) return 'UNet';
     if (t.includes('vae')) return 'VAE';
     if (t.includes('controlnet')) return 'Controlnet';
     if (t.includes('upscaler') || t.includes('upscale')) return 'Upscaler';
-    if (t.includes('text') || t.includes('clip')) return 'TextEncoder';
-    if (t.includes('llm') || t.includes('chat') || t.includes('instruct')) return 'LLM';
+    if (t.includes('text_encoder') || t.includes('clip') || t.includes('t5') || t.includes('text')) return 'TextEncoder';
     return 'Checkpoint';
   }
 
@@ -661,6 +708,83 @@ export class ModelMetadataExtractor {
       return localPath;
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Queries Hugging Face public API for model repository metadata by repoId or model search term.
+   */
+  async fetchHuggingFaceMetadata(
+    repoIdOrQuery: string
+  ): Promise<{
+    hfRepoId?: string;
+    modelName?: string;
+    creator?: string;
+    modelType?: string;
+    baseModel?: string;
+    description?: string;
+    tags?: string[];
+  } | null> {
+    if (!repoIdOrQuery || typeof repoIdOrQuery !== 'string') return null;
+    const cleanQuery = repoIdOrQuery.trim();
+    if (!cleanQuery) return null;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+    try {
+      let url: string;
+      if (cleanQuery.includes('/') && !cleanQuery.includes(' ')) {
+        url = `https://huggingface.co/api/models/${encodeURIComponent(cleanQuery)}`;
+      } else {
+        url = `https://huggingface.co/api/models?search=${encodeURIComponent(cleanQuery)}&limit=1`;
+      }
+
+      const res = await fetch(url, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'RenegadeSwarm/0.1.0' },
+      });
+
+      if (!res.ok) return null;
+
+      let data: any = await res.json();
+      if (Array.isArray(data)) {
+        if (data.length === 0) return null;
+        data = data[0];
+      }
+
+      const id = data.id || data.modelId || '';
+      const author = data.author || (id.includes('/') ? id.split('/')[0] : '');
+      const cleanTags = Array.isArray(data.tags)
+        ? data.tags.map((t: string) => sanitizeAndDecodeHtml(t)).filter(Boolean)
+        : [];
+
+      let modelType: string | undefined;
+      if (data.pipeline_tag) {
+        modelType = this.normalizeModelType(data.pipeline_tag);
+      }
+
+      let baseModel: string | undefined;
+      if (data.cardData?.base_model) {
+        const bm = data.cardData.base_model;
+        baseModel = sanitizeAndDecodeHtml(Array.isArray(bm) ? bm[0] : bm);
+      }
+
+      const description = data.description ? sanitizeAndDecodeHtml(data.description) : '';
+
+      return {
+        hfRepoId: id,
+        modelName: id.includes('/') ? id.split('/')[1] : id,
+        creator: author ? sanitizeAndDecodeHtml(author) : undefined,
+        modelType,
+        baseModel,
+        description,
+        tags: cleanTags,
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

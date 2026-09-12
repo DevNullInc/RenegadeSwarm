@@ -123,7 +123,10 @@ describe('ModelMetadataExtractor Engine', () => {
     expect(meta.isLlm).toBe(true);
     expect(meta.modelType).toBe('LLM');
     // Ensure fetch was not called for CivitAI lookup on LLM
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('civitai.com'),
+      expect.anything()
+    );
     fetchSpy.mockRestore();
   });
 
@@ -270,6 +273,36 @@ describe('ModelMetadataExtractor Engine', () => {
 
     const res = await extractor.fetchCivitaiMetadataByHash('nsfwhash1234567890abcdef', true);
     expect(res?.previewImageUrl).toBe('https://civitai.com/mature1.jpg');
+
+    fetchSpy.mockRestore();
+  });
+
+  it('should query Hugging Face API and extract creator, tags, and baseModel for LLM / HF models', async () => {
+    const mockHfResponse = {
+      id: 'TheBloke/Llama-2-7B-Chat-GGUF',
+      author: 'TheBloke',
+      pipeline_tag: 'text-generation',
+      tags: ['llama', 'text-generation', 'conversational', 'license:other'],
+      cardData: {
+        base_model: 'meta-llama/Llama-2-7b-chat-hf',
+      },
+      description: 'Llama 2 7B Chat GGUF model weights',
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockHfResponse,
+    } as any);
+
+    const res = await extractor.fetchHuggingFaceMetadata('TheBloke/Llama-2-7B-Chat-GGUF');
+    expect(res).not.toBeNull();
+    expect(res?.creator).toBe('TheBloke');
+    expect(res?.modelName).toBe('Llama-2-7B-Chat-GGUF');
+    expect(res?.modelType).toBe('LLM');
+    expect(res?.baseModel).toBe('meta-llama/Llama-2-7b-chat-hf');
+    expect(res?.tags).toContain('llama');
+    expect(res?.tags).toContain('text-generation');
+    expect(res?.description).toBe('Llama 2 7B Chat GGUF model weights');
 
     fetchSpy.mockRestore();
   });

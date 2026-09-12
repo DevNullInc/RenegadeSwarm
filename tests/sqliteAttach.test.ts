@@ -52,6 +52,7 @@ describe('SQLite ATTACH DATABASE Cross-DB Bridge', () => {
             civitai_version_id INTEGER,
             civitai_name TEXT,
             model_type TEXT,
+            preview_url TEXT,
             source TEXT DEFAULT 'civitai',
             hf_repo_id TEXT,
             hf_commit_sha TEXT,
@@ -131,5 +132,32 @@ describe('SQLite ATTACH DATABASE Cross-DB Bridge', () => {
     const updatedModels = await bridge.getLocalModels();
     expect(updatedModels.length).toBe(2);
     expect(updatedModels.some((m) => m.civitai_name === 'SDXL Cyberpunk LoRA')).toBe(true);
+  });
+
+  it('should update and enrich existing model metadata in cmm.local_models', async () => {
+    const enriched = await bridge.updateModelMetadata({
+      filePath: 'C:/models/flux.safetensors',
+      fileName: 'flux.safetensors',
+      sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      civitaiModelId: 998877,
+      civitaiVersionId: 112233,
+      civitaiName: 'FLUX.1 Dev (Enriched Edition)',
+      creator: 'TheStygianRenegade',
+      modelType: 'Checkpoint',
+      baseModel: 'Flux.1 D',
+      description: 'Enriched model description from registry',
+      tags: ['flux', 'hyperrealism'],
+      previewUrl: 'https://civitai.com/preview.jpg',
+    });
+
+    expect(enriched).toBe(true);
+
+    const models = await bridge.getLocalModels();
+    const fluxModel = models.find((m) => m.file_name === 'flux.safetensors');
+    expect(fluxModel).toBeDefined();
+    expect(fluxModel?.civitai_name).toBe('FLUX.1 Dev (Enriched Edition)');
+    expect(fluxModel?.civitai_model_id).toBe(998877);
+    expect(fluxModel?.civitai_version_id).toBe(112233);
+    expect(fluxModel?.preview_url).toBe('https://civitai.com/preview.jpg');
   });
 });
