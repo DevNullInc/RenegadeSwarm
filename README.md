@@ -240,6 +240,7 @@ Detailed technical specifications and operational guides are available in the [`
 - [**Signing & Provenance Guide (`docs/SIGNING_GUIDE.md`)**](docs/SIGNING_GUIDE.md) — Guide to generating Ed25519 keys, signing models, and cryptographic verification.
 - [**Web of Trust Guide (`docs/WEB_OF_TRUST.md`)**](docs/WEB_OF_TRUST.md) — Detailed guide on key distribution, trust levels, TOFU verification, and keyring import/export.
 - [**Troubleshooting Guide (`docs/TROUBLESHOOTING.md`)**](docs/TROUBLESHOOTING.md) — Operational solutions for NAT traversal, quarantine rejections, and CMM database locks.
+- [**Legal Disclaimer & Non-Liability Notice (`docs/LEGAL_DISCLAIMER.md`)**](docs/LEGAL_DISCLAIMER.md) — Comprehensive legal notice regarding decentralized P2P architecture, Betamax doctrine, and limitation of liability.
 
 ---
 
@@ -269,7 +270,7 @@ Contributions are welcome! Please follow these standards:
 
 ## ⚖️ Usage Compliance
 
-RenegadeSwarm is a neutral distribution protocol. Users are responsible for complying with local laws regarding data sharing, copyright, and AI model distribution. The content validation filters are technical safeguards, not legal guarantees.
+RenegadeSwarm is a neutral distribution protocol. Users are solely and exclusively responsible for complying with local laws regarding data sharing, copyright, and AI model distribution. The content validation filters are technical safeguards against malware and corruption, not legal guarantees. See [**Legal Disclaimer**](docs/LEGAL_DISCLAIMER.md) for full terms and conditions.
 
 ---
 
