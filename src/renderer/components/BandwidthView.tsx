@@ -57,16 +57,15 @@ export const BandwidthView: React.FC<BandwidthViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '24px', height: '100%', overflowY: 'auto' }}>
-      <div style={{ maxWidth: '840px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-        <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '6px' }}>Network, Bandwidth & Sharing Privacy</h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            Configure rate limits, P2P listening ports, and granular model sharing privacy filters (Opt-In by default).
-          </p>
-        </div>
+    <div style={{ padding: '16px 24px', height: '100%', width: '100%', display: 'flex', flexDirection: 'column', gap: '16px', boxSizing: 'border-box', overflowY: 'auto' }}>
+      <div>
+        <h2 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '4px' }}>Network, Bandwidth & Sharing Privacy</h2>
+        <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+          Configure rate limits, P2P listening ports, and granular model sharing privacy filters (Opt-In by default).
+        </p>
+      </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Privacy & Model Sharing Controls */}
           <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px', border: '1px solid rgba(168, 85, 247, 0.3)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -276,7 +275,6 @@ export const BandwidthView: React.FC<BandwidthViewProps> = ({
             </button>
           </div>
         </form>
-      </div>
     </div>
   );
 };

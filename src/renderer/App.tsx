@@ -22,6 +22,7 @@ import { DashboardView } from './components/DashboardView';
 import { SeederView } from './components/SeederView';
 import { CmmSyncView } from './components/CmmSyncView';
 import { BandwidthView } from './components/BandwidthView';
+import { SettingsView } from './components/SettingsView';
 import { SwarmTorrentStatus } from '../protocol/types';
 import { BandwidthSettings, CreateSwarmPackageRequest } from '../shared/ipcContracts';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../protocol/sharingPolicy';
@@ -55,6 +56,19 @@ declare global {
       getSharingPolicy: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
       updateSharingPolicy: (settings: any) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
       toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<{ success: boolean; data?: any; error?: string }>;
+      browseModelFile: () => Promise<{ success: boolean; data?: { filePath: string; metadata: any }; error?: string }>;
+      browsePreviewFile: () => Promise<{ success: boolean; data?: { filePath: string }; error?: string }>;
+      extractModelMetadata: (filePath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+      getKeyringEntries: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
+      addKeyringEntry: (entry: any) => Promise<{ success: boolean; data?: any[]; error?: string }>;
+      removeKeyringEntry: (publicKeyHex: string) => Promise<{ success: boolean; data?: any[]; error?: string }>;
+      exportKeyring: () => Promise<{ success: boolean; data?: string; error?: string }>;
+      importKeyring: (jsonString: string) => Promise<{ success: boolean; data?: { importedCount: number; entries: any[] }; error?: string }>;
+      getUserIdentity: () => Promise<{ success: boolean; data?: any; error?: string }>;
+      setUserIdentity: (identity: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+      generateIdentity: (creatorName: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+      getKeyringLockoutStatus: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').LockoutStatus; error?: string }>;
+      generateKeyPair: () => Promise<{ success: boolean; data?: { publicKeyHex: string; privateKeyHex: string }; error?: string }>;
     };
   }
 }
@@ -80,6 +94,8 @@ export default function App() {
   const [cmmModelCount, setCmmModelCount] = useState(0);
   const [cmmDbPath, setCmmDbPath] = useState('D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [comfyModelsRoot, setComfyModelsRoot] = useState('D:\\ComfyUI\\models');
+
+  const [selectedSeederModel, setSelectedSeederModel] = useState<CmmLocalModelRow | null>(null);
 
   const formatSpeed = (bps: number) => {
     if (!bps) return '0 KB/s';
@@ -277,7 +293,7 @@ export default function App() {
         cmmModelCount={cmmModelCount}
       />
 
-      <main style={{ flex: 1, overflow: 'hidden' }}>
+      <main style={{ flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
         {activeTab === 'dashboard' && (
           <DashboardView
             torrents={torrents}
@@ -290,6 +306,7 @@ export default function App() {
         {activeTab === 'seeder' && (
           <SeederView
             onCreatePackage={handleCreatePackage}
+            initialModel={selectedSeederModel}
           />
         )}
         {activeTab === 'cmm' && (
@@ -300,7 +317,8 @@ export default function App() {
             sharingPolicy={sharingPolicy}
             onSyncConfig={handleSyncCmmConfig}
             onRefreshModels={fetchCmmModels}
-            onQuickSeed={() => {
+            onQuickSeed={(model) => {
+              setSelectedSeederModel(model);
               setActiveTab('seeder');
             }}
             onToggleModelShare={handleToggleModelShare}
@@ -311,6 +329,15 @@ export default function App() {
             settings={bandwidthSettings}
             sharingPolicy={sharingPolicy}
             onUpdateSettings={handleUpdateBandwidth}
+            onUpdateSharingPolicy={handleUpdateSharingPolicy}
+          />
+        )}
+        {activeTab === 'settings' && (
+          <SettingsView
+            cmmDbPath={cmmDbPath}
+            comfyModelsRoot={comfyModelsRoot}
+            sharingPolicy={sharingPolicy}
+            onSyncCmmConfig={handleSyncCmmConfig}
             onUpdateSharingPolicy={handleUpdateSharingPolicy}
           />
         )}

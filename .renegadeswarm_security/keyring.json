@@ -1,0 +1,18 @@
+[
+  {
+    "creatorName": "TheStygianRenegade",
+    "publicKeyHex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "trustLevel": "VerifiedCreator",
+    "alias": "Renegade Core Team",
+    "addedAt": 1723456789,
+    "notes": "Official RenegadeSwarm creator key"
+  },
+  {
+    "creatorName": "DevNullInc",
+    "publicKeyHex": "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
+    "trustLevel": "VerifiedCreator",
+    "alias": "/dev/null Inc",
+    "addedAt": 1723456789,
+    "notes": "Official DevNullInc publisher key"
+  }
+]

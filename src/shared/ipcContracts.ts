@@ -68,6 +68,31 @@ export const ToggleModelShareRequestSchema = z.object({
   optIn: z.boolean(),
 });
 
+export const KeyringEntrySchema = z.object({
+  creatorName: z.string().min(1).max(100),
+  publicKeyHex: z.string().length(64).regex(/^[0-9a-fA-F]{64}$/, 'Invalid 64-character Ed25519 public key hex'),
+  trustLevel: z.enum(['VerifiedCreator', 'Community', 'Untrusted', 'Blocked']),
+  alias: z.string().optional(),
+  addedAt: z.number().int().positive(),
+  notes: z.string().optional(),
+});
+
+export const UserIdentitySchema = z.object({
+  creatorName: z.string().min(1).max(100),
+  publicKeyHex: z.string().length(64).regex(/^[0-9a-fA-F]{64}$/, 'Invalid 64-character Ed25519 public key hex'),
+  privateKeyHex: z.string().length(64).regex(/^[0-9a-fA-F]{64}$/, 'Invalid 64-character Ed25519 private key hex'),
+  createdAt: z.number().int().positive(),
+  lastRegeneratedAt: z.number().int().positive().optional(),
+});
+
+export const LockoutStatusSchema = z.object({
+  canGenerate: z.boolean(),
+  lockoutRemainingSeconds: z.number().int().nonnegative(),
+  nextAllowedAt: z.number().int().positive(),
+  lastGeneratedAt: z.number().int().nonnegative(),
+  lockoutDurationSeconds: z.number().int().positive(),
+});
+
 // Response Types
 export interface IpcResponse<T = unknown> {
   success: boolean;
@@ -81,3 +106,6 @@ export type CreateSwarmPackageRequest = z.infer<typeof CreateSwarmPackageRequest
 export type BandwidthSettings = z.infer<typeof BandwidthSettingsSchema>;
 export type CmmSyncConfigRequest = z.infer<typeof CmmSyncConfigRequestSchema>;
 export type ToggleModelShareRequest = z.infer<typeof ToggleModelShareRequestSchema>;
+export type KeyringEntryContract = z.infer<typeof KeyringEntrySchema>;
+export type UserIdentity = z.infer<typeof UserIdentitySchema>;
+export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;

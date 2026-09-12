@@ -23,10 +23,11 @@ import {
   Database,
   Sliders,
   Radio,
-  ShieldCheck
+  ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
 
-export type TabId = 'dashboard' | 'seeder' | 'cmm' | 'bandwidth';
+export type TabId = 'dashboard' | 'seeder' | 'cmm' | 'bandwidth' | 'settings';
 
 interface NavbarProps {
   activeTab: TabId;
@@ -50,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'seeder' as TabId, label: 'Package & Seed', icon: UploadCloud },
     { id: 'cmm' as TabId, label: 'RenegadeCMM Bridge', icon: Database },
     { id: 'bandwidth' as TabId, label: 'Network & Quotas', icon: Sliders },
+    { id: 'settings' as TabId, label: 'Keyring & Settings', icon: KeyRound },
   ];
 
   return (

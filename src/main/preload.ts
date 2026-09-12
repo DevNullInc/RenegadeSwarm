@@ -41,6 +41,19 @@ export interface RenegadeSwarmApi {
   getSharingPolicy: () => Promise<any>;
   updateSharingPolicy: (settings: any) => Promise<any>;
   toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<any>;
+  browseModelFile: () => Promise<any>;
+  browsePreviewFile: () => Promise<any>;
+  extractModelMetadata: (filePath: string) => Promise<any>;
+  getKeyringEntries: () => Promise<any>;
+  addKeyringEntry: (entry: any) => Promise<any>;
+  removeKeyringEntry: (publicKeyHex: string) => Promise<any>;
+  exportKeyring: () => Promise<any>;
+  importKeyring: (jsonString: string) => Promise<any>;
+  getUserIdentity: () => Promise<any>;
+  setUserIdentity: (identity: any) => Promise<any>;
+  generateIdentity: (creatorName: string) => Promise<any>;
+  getKeyringLockoutStatus: () => Promise<any>;
+  generateKeyPair: () => Promise<any>;
 }
 
 const api: RenegadeSwarmApi = {
@@ -59,6 +72,19 @@ const api: RenegadeSwarmApi = {
   getSharingPolicy: () => ipcRenderer.invoke('sharing:getPolicy'),
   updateSharingPolicy: (settings) => ipcRenderer.invoke('sharing:updatePolicy', settings),
   toggleModelShare: (req) => ipcRenderer.invoke('sharing:toggleModelShare', req),
+  browseModelFile: () => ipcRenderer.invoke('dialog:openModelFile'),
+  browsePreviewFile: () => ipcRenderer.invoke('dialog:openPreviewFile'),
+  extractModelMetadata: (filePath) => ipcRenderer.invoke('model:extractMetadata', filePath),
+  getKeyringEntries: () => ipcRenderer.invoke('keyring:getEntries'),
+  addKeyringEntry: (entry) => ipcRenderer.invoke('keyring:addEntry', entry),
+  removeKeyringEntry: (publicKeyHex) => ipcRenderer.invoke('keyring:removeEntry', publicKeyHex),
+  exportKeyring: () => ipcRenderer.invoke('keyring:export'),
+  importKeyring: (jsonString) => ipcRenderer.invoke('keyring:import', jsonString),
+  getUserIdentity: () => ipcRenderer.invoke('keyring:getUserIdentity'),
+  setUserIdentity: (identity) => ipcRenderer.invoke('keyring:setUserIdentity', identity),
+  generateIdentity: (creatorName) => ipcRenderer.invoke('keyring:generateIdentity', creatorName),
+  getKeyringLockoutStatus: () => ipcRenderer.invoke('keyring:getLockoutStatus'),
+  generateKeyPair: () => ipcRenderer.invoke('crypto:generateKeyPair'),
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);

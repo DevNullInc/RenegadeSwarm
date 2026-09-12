@@ -27,10 +27,10 @@ RenegadeSwarm ships with built-in root public keys for the core project maintain
 * **DevNullInc** (`af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`)
 
 ### 2. Manual Pinning via Desktop UI
-1. Navigate to **Settings → Trusted Creators & Keyring**.
+1. Navigate to **Keyring & Settings → Web of Trust**.
 2. Click **Add Trusted Creator**.
-3. Enter the Creator Name (e.g. `LyKON`) and their 64-character Ed25519 public key.
-4. Set the trust level to **Verified Creator**.
+3. Enter the Creator Name (e.g. `Anon`) and their 64-character Ed25519 public key.
+4. Set the trust level to **Verified Creator** (Green), **Community** (Amber), or **Blocked** (Red).
 
 ### 3. Identity Attestation (Out-of-Band Verification)
 Model creators publish their 64-character public key on their verified web profiles:
@@ -54,7 +54,10 @@ Communities can curate and share trusted creator lists in JSON format:
 ]
 ```
 
-To import a bundle, click **Import Keyring JSON** inside **Settings → Trusted Creators**.
+To import a bundle, click **Import Keyring JSON** inside **Keyring & Settings → Web of Trust**.
+
+### 5. Anti-Abuse Lockouts & Identity Binding
+RenegadeSwarm prevents bad actors who have been blocked by the community from rapidly cycling new public keys on the same client. A mandatory 24-hour regeneration lockout prevents rapid identity churning and reinforces durable accountability.
 
 ---
 

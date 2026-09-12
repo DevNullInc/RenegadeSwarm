@@ -13,9 +13,24 @@ Cryptographic signing establishes immutable proof of authorship for AI and LLM m
 
 ---
 
-## 🔑 1. Generating Your Ed25519 Keypair
+## 🔑 1. Generating & Managing Your Ed25519 Keypair
 
-You can generate a cryptographic keypair directly in TypeScript using the pure protocol module:
+### Desktop UI Key Generator (Recommended)
+Inside the desktop application:
+1. Navigate to **Keyring & Settings → Creator Identity & Signing**.
+2. Enter your public handle (e.g. `@anon`) and click **Generate Keypair**.
+3. Your 32-byte Ed25519 keypair is created instantly:
+   - **Public Key**: Displayed in hex format with a 1-click copy button to paste into your Hugging Face, CivitAI, or GitHub creator profiles.
+   - **Private Key**: Masked by default with reveal controls and encrypted on disk using **Machine-Bound AES-256-GCM** (never saved in plaintext).
+
+> [!IMPORTANT]
+> **Anti-Abuse Regeneration Lockout (24-Hour Cooldown)**:
+> To prevent malicious actors from cycling disposable identities and evading Web-of-Trust blacklists, key regeneration enforces a **mandatory 24-hour lockout cooldown**. During this cooldown, the desktop UI displays a real-time countdown badge (`Regen Locked (Xh Ym)`).
+
+---
+
+### Programmatic Key Generation (SDK)
+You can also generate an Ed25519 keypair directly in TypeScript using the pure protocol module:
 
 ```typescript
 import { generateEd25519KeyPair } from '../src/protocol/crypto';

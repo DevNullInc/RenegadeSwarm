@@ -6,7 +6,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-67%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-79%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -76,10 +76,11 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 * Files remain quarantined until the transfer reaches 100%, passes in-memory piece SHA256 checks, passes full-file SHA256 verification, and clears deep content inspection.
 * Only after all safety gates pass is the file atomically renamed and promoted to your active ComfyUI models directory.
 
-### 4. Cryptographic Provenance & Web of Trust (Ed25519)
+### 4. Cryptographic Provenance, Machine-Bound Vault & Anti-Abuse Key Lockout
 * Manifests are signed by model creators using 32-byte **Ed25519** public keys.
-* The digital signature binds the model's metadata, title, author, and file SHA256 digest directly to the BitTorrent `infoHash`.
-* Downloader clients verify signatures against the local Keyring and Web-of-Trust tiers (`VerifiedCreator`, `Community`, `Untrusted`, `Blocked`). See [Web of Trust Guide](docs/WEB_OF_TRUST.md) for details.
+* **Machine-Bound AES-256-GCM Vault**: Private keys are encrypted at rest using machine-and-user entropy, ensuring plaintext keys are never stored on disk.
+* **Anti-Abuse Regeneration Lockout**: Enforces a 24-hour cooldown between keypair regenerations to prevent malicious actors from cycling disposable identities and evading Web of Trust blacklists.
+* **Web of Trust Keyring**: Downloader clients verify signatures against the local Keyring and Web-of-Trust tiers (`VerifiedCreator`, `Community`, `Untrusted`, `Blocked`). See [Web of Trust Guide](docs/WEB_OF_TRUST.md) for details.
 
 ### 5. Swarm & DHT Sybil Attack Hardening
 * **BEP 42 Node ID Verification**: Validates IP-derived hashes on incoming DHT nodes to prevent Sybil routing table poisoning.
@@ -97,12 +98,13 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 | Feature | Description |
 |---|---|
 | 🔒 **Opt-In Model Sharing & Privacy Policy** | Strict **Opt-In by default**. Local models and completed downloads are never seeded without explicit user permission. Built-in folder and tag blacklists protect private LoRAs and proprietary checkpoints. |
+| 🔑 **Ed25519 Creator Provenance & Web of Trust** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`. Includes pre-seeded root keys, manual creator pinning, JSON bundle import/export, and machine-bound AES-256-GCM key storage. |
+| 🛡️ **Anti-Abuse Key Lockout Safeguard** | Mandatory 24-hour regeneration cooldown prevents bad actors from cycling identities or evading community blacklists. |
 | 🚀 **50GB+ Memory-Safe Streaming** | Tuned random-access disk streaming with pre-write in-memory SHA256 chunk verification prevents buffer fragmentation on multi-gigabyte models. |
 | 🛡️ **Zero-Masquerade Content Validation** | Deep magic-byte inspection strictly validates SafeTensors, GGUF, ONNX, and PyTorch headers while rejecting executables, scripts, media, and polyglots. |
-| 🔑 **Ed25519 Creator Provenance** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`, guaranteeing authenticity and preventing tampering. |
 | ⚡ **Atomic RenegadeCMM Bridge** | SQLite `ATTACH DATABASE` synchronization commits downloads directly into ComfyUI folder structures (`checkpoints/`, `loras/`, `vae/`) with zero sync lag. |
 | 🌐 **BEP 19 Web Seed Bootstrapping** | New swarms bootstrap immediately from Hugging Face or CivitAI HTTP endpoints while transitioning seamlessly into decentralized P2P sharing. |
-| 💻 **Cyberpunk Desktop UI & Tray** | Dark-themed dashboard with real-time transfer graphs, background tray seeding, and customizable ratio governance (e.g. auto-halt at 2.0x). |
+| 💻 **Cyberpunk Desktop UI & Settings** | Dark-themed responsive dashboard with live swarm telemetry, background tray seeding, ratio governance, and complete Web of Trust settings. |
 
 ---
 
@@ -132,6 +134,8 @@ RenegadeSwarm/
 │   │   ├── ipcHandlers.ts      # Zod-validated IPC handler registry
 │   │   ├── tray.ts             # System tray manager for 24/7 background seeding
 │   │   ├── engine/             # P2P Engine & Storage Layer
+│   │   │   ├── keyringManager.ts     # Keyring persistence & anti-abuse lockout governor
+│   │   │   ├── secureStorage.ts      # Machine-bound AES-256-GCM credential encryption
 │   │   │   ├── swarmEngine.ts        # Swarm coordinator & active transfer manager
 │   │   │   ├── syncQueue.ts          # Quarantine state machine & atomic promoter
 │   │   │   ├── pieceStreamEngine.ts  # Tuned highWaterMark disk writer
@@ -141,6 +145,8 @@ RenegadeSwarm/
 │   │   │   ├── daemonRpcEngine.ts    # JSON-RPC adapter for transmission-daemon / rqbit sidecars
 │   │   │   ├── contentInspector.ts   # Quarantine header reader & extension resolver
 │   │   │   └── manifestBuilder.ts    # SHA256 & info-hash builder with Web Seeds
+│   │   ├── metadata/           # Multi-Tier Model Metadata Extractor
+│   │   │   └── modelMetadataExtractor.ts # SafeTensors uint64 header, CMM DB & CivitAI scraper
 │   │   └── cmm/                # RenegadeCMM Integration
 │   │       ├── cmmDbBridge.ts        # Non-blocking SQLite bridge with ATTACH DATABASE
 │   │       └── cmmFolderRouter.ts    # ComfyUI directory router & traversal protection
@@ -150,9 +156,9 @@ RenegadeSwarm/
 │   │   └── swarmProtocol.ts    # Swarm manifest schema, hashes & peer metrics
 │   └── renderer/               # Desktop UI (React, Vite, Dark Cyberpunk Theme)
 │       ├── App.tsx             # Main application layout & live telemetry coordinator
-│       ├── components/         # Swarm Monitor, Seeder, CMM Bridge, Bandwidth views
+│       ├── components/         # Swarm Monitor, Seeder, CMM Bridge, Bandwidth, Settings views
 │       └── styles/             # Design tokens & glassmorphism styling
-├── tests/                      # Vitest test suite (16 suites, 67 unit & integration tests)
+├── tests/                      # Vitest test suite (19 suites, 79 unit & integration tests)
 ```
 
 ---
@@ -161,15 +167,16 @@ RenegadeSwarm/
 
 To give users and creators 100% peace of mind, RenegadeSwarm undergoes multi-layered automated verification, defensive SecOps audits, and penetration testing across all layers of the codebase:
 
-### 1. Comprehensive Test Suite (67 Passing Tests / 16 Suites)
+### 1. Comprehensive Test Suite (79 Passing Tests / 19 Suites)
 Every commit is validated through automated integration and unit test matrices covering:
-* **Ed25519 Cryptographic Provenance** (`tests/ed25519Signing.test.ts`): Signature generation, SPKI/PKCS8 DER conversion, and tampering rejection.
+* **Ed25519 Cryptographic Provenance & Keyring Vault** (`tests/ed25519Signing.test.ts`, `tests/keyringManager.test.ts`): Signature generation, machine-bound AES-256-GCM encryption at rest, anti-abuse 24h lockout enforcement, SPKI/PKCS8 DER conversion, and tampering rejection.
 * **Zero-Masquerade Content Validation** (`tests/contentValidator.test.ts`): Verification of SafeTensors, GGUF, ONNX, and PyTorch headers; instant rejection of polyglot ZIPs (`PK\x03\x04`), Windows MZ (`4D 5A`), Linux ELF (`7F 45 4C 46`), Mach-O, Shebang scripts (`#!`), and MP4/MKV video containers.
 * **Quarantine State Isolation Machine** (`tests/syncQueue.test.ts`): Verification of the full lifecycle (`Quarantine → Validating → Queued → Active → Completed → Verified`) preventing unverified piece writes to active directories.
 * **P2P Wire Protocol & Sybil Defense** (`tests/wireProtocol.test.ts`, `tests/dhtHardening.test.ts`): BEP 3 wire protocol framing, handshake bitfields, and BEP 42 IP-hash node ID verification.
 * **Opt-In Model Sharing & Privacy Governance** (`tests/sharingPolicy.test.ts`): Strict opt-in by default verification, automatic blocking of `/private/`, `/drafts/`, `/wip/`, and `private_*` models.
 * **SQLite Zero-Lag WAL Attachment** (`tests/sqliteAttach.test.ts`): Non-blocking cross-database synchronization with `renegadecmm.sqlite`.
 * **ComfyUI Directory Routing & Traversal Defense** (`tests/cmmFolderRouter.test.ts`): Directory traversal rejection, path sanitization, and model type routing (`checkpoints/`, `loras/`, `vae/`, etc.).
+* **Model Metadata Extraction Pipeline** (`tests/modelMetadataExtractor.test.ts`): SafeTensors uint64 header parsing, sibling preview asset discovery, and CMM database integration.
 
 ### 2. Multi-Perspective Security Audit Summary
 

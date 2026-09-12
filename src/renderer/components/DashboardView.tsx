@@ -77,68 +77,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   return (
-    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'auto' }}>
+    <div style={{ padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '16px', height: '100%', width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
       {/* Top Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-        <div className="glass-panel" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+        <div className="glass-panel" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
             <span>ACTIVE SWARMS</span>
-            <Zap size={16} color="#a855f7" />
+            <Zap size={15} color="#a855f7" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700 }}>
-            {torrents.length} <span style={{ fontSize: '13px', color: '#a855f7', fontWeight: 500 }}>({torrents.filter(t => t.state === 'seeding').length} Seeding)</span>
+          <div style={{ fontSize: '22px', fontWeight: 700 }}>
+            {torrents.length} <span style={{ fontSize: '12px', color: '#a855f7', fontWeight: 500 }}>({torrents.filter(t => t.state === 'seeding').length} Seeding)</span>
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
+        <div className="glass-panel" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
             <span>AGGREGATE DOWNLOAD</span>
-            <Download size={16} color="#10b981" />
+            <Download size={15} color="#10b981" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700 }} className="mono">
+          <div style={{ fontSize: '22px', fontWeight: 700 }} className="mono">
             {formatBytes(totalDownSpeed)}/s
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
+        <div className="glass-panel" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
             <span>AGGREGATE UPLOAD</span>
-            <Upload size={16} color="#06b6d4" />
+            <Upload size={15} color="#06b6d4" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700 }} className="mono">
+          <div style={{ fontSize: '22px', fontWeight: 700 }} className="mono">
             {formatBytes(totalUpSpeed)}/s
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '12px', marginBottom: '8px' }}>
+        <div className="glass-panel" style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', marginBottom: '6px' }}>
             <span>CONNECTED PEERS</span>
-            <Users size={16} color="#eab308" />
+            <Users size={15} color="#eab308" />
           </div>
-          <div style={{ fontSize: '24px', fontWeight: 700 }}>
-            {totalPeers} <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 400 }}>Distributed</span>
+          <div style={{ fontSize: '22px', fontWeight: 700 }}>
+            {totalPeers} <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 400 }}>Distributed</span>
           </div>
         </div>
       </div>
 
       {/* Action Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             onClick={() => setFilter('all')}
             className={filter === 'all' ? 'btn-primary' : 'btn-secondary'}
+            style={{ padding: '6px 14px', fontSize: '12px' }}
           >
             All Transfers ({torrents.length})
           </button>
           <button
             onClick={() => setFilter('downloading')}
             className={filter === 'downloading' ? 'btn-primary' : 'btn-secondary'}
+            style={{ padding: '6px 14px', fontSize: '12px' }}
           >
             Downloading ({torrents.filter(t => t.state === 'downloading').length})
           </button>
           <button
             onClick={() => setFilter('seeding')}
             className={filter === 'seeding' ? 'btn-primary' : 'btn-secondary'}
+            style={{ padding: '6px 14px', fontSize: '12px' }}
           >
             Seeding ({torrents.filter(t => t.state === 'seeding').length})
           </button>
@@ -147,39 +150,40 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <button
           onClick={() => setShowAddModal(true)}
           className="btn-primary"
+          style={{ padding: '6px 14px', fontSize: '12px' }}
         >
-          <Plus size={16} />
+          <Plus size={15} />
           <span>Add Magnet Link</span>
         </button>
       </div>
 
       {/* Torrents Table */}
-      <div className="glass-panel" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="glass-panel" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         {filtered.length === 0 ? (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <HardDrive size={48} style={{ opacity: 0.3, marginBottom: '12px' }} />
-            <div style={{ fontSize: '16px', fontWeight: 500, color: 'var(--text-primary)' }}>No active transfers in this view</div>
-            <div style={{ fontSize: '13px', marginTop: '4px' }}>Add a magnet link or package a local model to begin seeding.</div>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <HardDrive size={44} style={{ opacity: 0.3, marginBottom: '10px' }} />
+            <div style={{ fontSize: '15px', fontWeight: 500, color: 'var(--text-primary)' }}>No active transfers in this view</div>
+            <div style={{ fontSize: '12px', marginTop: '4px' }}>Add a magnet link or package a local model to begin seeding.</div>
           </div>
         ) : (
-          <div style={{ overflowY: 'auto', flex: 1 }}>
+          <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1, minHeight: 0 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>
-                  <th style={{ padding: '12px 16px' }}>Model & Payload</th>
-                  <th style={{ padding: '12px 16px' }}>Type</th>
-                  <th style={{ padding: '12px 16px' }}>Progress</th>
-                  <th style={{ padding: '12px 16px' }}>Speed (↓ / ↑)</th>
-                  <th style={{ padding: '12px 16px' }}>Peers</th>
-                  <th style={{ padding: '12px 16px' }}>Ratio</th>
-                  <th style={{ padding: '12px 16px' }}>CMM Status</th>
-                  <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+                <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', position: 'sticky', top: 0, background: 'var(--bg-surface)', zIndex: 1 }}>
+                  <th style={{ padding: '10px 14px' }}>Model & Payload</th>
+                  <th style={{ padding: '10px 14px', width: '110px' }}>Type</th>
+                  <th style={{ padding: '10px 14px', width: '160px' }}>Progress</th>
+                  <th style={{ padding: '10px 14px', width: '130px' }}>Speed (↓ / ↑)</th>
+                  <th style={{ padding: '10px 14px', width: '110px' }}>Peers</th>
+                  <th style={{ padding: '10px 14px', width: '80px' }}>Ratio</th>
+                  <th style={{ padding: '10px 14px', width: '100px' }}>CMM Status</th>
+                  <th style={{ padding: '10px 14px', width: '130px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((t) => (
                   <tr key={t.infoHash} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                    <td style={{ padding: '14px 16px' }}>
+                    <td style={{ padding: '12px 14px' }}>
                       <div style={{ fontWeight: 600, color: '#f8fafc' }}>{t.title}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }} className="mono">
                         {t.infoHash.slice(0, 16)}... | {formatBytes(t.downloadedBytes)} of {formatBytes(t.totalBytes)}
