@@ -2,11 +2,11 @@
 
 > **A decentralized, torrent-style AI model distribution network with automatic ComfyUI organization and seamless RenegadeCMM integration.**
 
-[![Version: 0.1.0](https://img.shields.io/badge/version-0.1.0-purple.svg)](https://github.com/DevNullInc/RenegadeSwarm/releases)
+[![Version: 0.2.0](https://img.shields.io/badge/version-0.2.0-purple.svg)](https://github.com/DevNullInc/RenegadeSwarm/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-79%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-90%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -167,7 +167,7 @@ RenegadeSwarm/
 
 To give users and creators 100% peace of mind, RenegadeSwarm undergoes multi-layered automated verification, defensive SecOps audits, and penetration testing across all layers of the codebase:
 
-### 1. Comprehensive Test Suite (79 Passing Tests / 19 Suites)
+### 1. Comprehensive Test Suite (90 Passing Tests / 19 Suites)
 Every commit is validated through automated integration and unit test matrices covering:
 * **Ed25519 Cryptographic Provenance & Keyring Vault** (`tests/ed25519Signing.test.ts`, `tests/keyringManager.test.ts`): Signature generation, machine-bound AES-256-GCM encryption at rest, anti-abuse 24h lockout enforcement, SPKI/PKCS8 DER conversion, and tampering rejection.
 * **Zero-Masquerade Content Validation** (`tests/contentValidator.test.ts`): Verification of SafeTensors, GGUF, ONNX, and PyTorch headers; instant rejection of polyglot ZIPs (`PK\x03\x04`), Windows MZ (`4D 5A`), Linux ELF (`7F 45 4C 46`), Mach-O, Shebang scripts (`#!`), and MP4/MKV video containers.
@@ -176,7 +176,7 @@ Every commit is validated through automated integration and unit test matrices c
 * **Opt-In Model Sharing & Privacy Governance** (`tests/sharingPolicy.test.ts`): Strict opt-in by default verification, automatic blocking of `/private/`, `/drafts/`, `/wip/`, and `private_*` models.
 * **SQLite Zero-Lag WAL Attachment** (`tests/sqliteAttach.test.ts`): Non-blocking cross-database synchronization with `renegadecmm.sqlite`.
 * **ComfyUI Directory Routing & Traversal Defense** (`tests/cmmFolderRouter.test.ts`): Directory traversal rejection, path sanitization, and model type routing (`checkpoints/`, `loras/`, `vae/`, etc.).
-* **Model Metadata Extraction Pipeline** (`tests/modelMetadataExtractor.test.ts`): SafeTensors uint64 header parsing, sibling preview asset discovery, and CMM database integration.
+* **Model Metadata Extraction & Registry Polling** (`tests/modelMetadataExtractor.test.ts`): SafeTensors uint64 header parsing, Hugging Face API fallback, CivitAI SHA256 hash matching, HTML sterilization, and CMM database integration.
 
 ### 2. Multi-Perspective Security Audit Summary
 
@@ -185,18 +185,72 @@ Every commit is validated through automated integration and unit test matrices c
 | **Application Security** | OWASP Top 10, ASVS, CWE Mapping (CWE-798, CWE-20, CWE-22, CWE-89) | Zero hardcoded secrets, 100% Zod-validated Electron IPC contracts, parameterized SQLite queries (`?`), and context isolation. | 🟢 **PASSED** |
 | **Defensive SecOps** | Fail-Fast Bootstrap, Strict Quarantine, Seeding Ratio Caps | In-memory piece pre-write SHA256 validation, quarantine isolation staging, and configurable seeding ratio governor. | 🟢 **PASSED** |
 | **P2P Penetration & Privacy** | Threat Modeling, Metadata Leakage & Sybil Analysis | Local paths sanitized via `path.basename()`, transmission daemon RPC locked to `127.0.0.1`, and BEP 42 DHT hardening. | 🟢 **PASSED** |
-| **Legal Compliance** | Betamax Doctrine (*Sony v. Universal*), Anti-Inducement (*MGM v. Grokster*), GPLv3 §§15–17 | Standardized GPL-3.0 headers across all 48 source files, neutral protocol safe-harbor notices, and comprehensive liability limits. | 🟢 **PASSED** |
+| **Legal Compliance** | Betamax Doctrine (*Sony v. Universal*), Anti-Inducement (*MGM v. Grokster*), GPLv3 §§15–17 | Standardized GPL-3.0 headers across all 58 source and test files, neutral protocol safe-harbor notices, and comprehensive liability limits. | 🟢 **PASSED** |
 
 ---
 
-## 🚀 Quick Start
+## 📦 Installation
+
+Download the official standalone release for your platform from [**GitHub Releases**](https://github.com/DevNullInc/RenegadeSwarm/releases).
+
+### 🪟 Windows
+
+1. **Installer**: Download and run `RenegadeSwarm-Setup-<version>.exe`.
+2. **Portable**: Alternatively, download `RenegadeSwarm-Portable-v<version>.exe` for a standalone single-executable that requires no installation.
+
+> [!NOTE]
+> **Windows SmartScreen**: Because RenegadeSwarm is an open-source, non-profit community tool without an expensive commercial code-signing certificate, Windows SmartScreen may display a _"Windows protected your PC"_ notice. Click **More info** $\rightarrow$ **Run anyway** to launch the software.
+
+---
+
+### 🍏 macOS (Unsigned App & Gatekeeper Setup)
+
+> [!NOTE]
+> **Maintainer Hardware Notice**: The primary development and CI environments are Windows and Linux. Because maintainers do not hold a paid Apple Developer ID certificate, macOS binaries are community-tested and provided on a best-effort basis.
+
+1. **Install**: Mount the downloaded disk image (`RenegadeSwarm-<version>.dmg`) and drag `RenegadeSwarm.app` into your `/Applications` folder.
+2. **Apple Gatekeeper Clearance**: Modern macOS versions (Sequoia, Sonoma, Ventura) attach a quarantine attribute (`com.apple.quarantine`) to all files downloaded via web browsers, triggering the notice: _"RenegadeSwarm cannot be opened because the developer cannot be verified"_.
+
+To clear the quarantine flag, choose either of the following methods:
+
+#### Method A: Terminal Command (Recommended — 3 Seconds)
+Open **Terminal** on your Mac and run:
+
+```bash
+xattr -cr /Applications/RenegadeSwarm.app
+```
+
+Once cleared, double-click `RenegadeSwarm.app` in Finder or Launchpad to launch normally.
+
+#### Method B: macOS System Settings
+1. Click **Cancel** on the Gatekeeper alert prompt.
+2. Open **System Settings $\rightarrow$ Privacy & Security** and scroll down to the **Security** section.
+3. Under _"Allow applications downloaded from"_, click **Open Anyway** next to the notification stating `"RenegadeSwarm" was blocked from use`.
+4. Authenticate with your Mac password or Touch ID to permanently permit execution.
+
+---
+
+### 🐧 Linux
+
+```bash
+# AppImage (Universal Linux)
+chmod +x RenegadeSwarm-<version>.AppImage
+./RenegadeSwarm-<version>.AppImage
+
+# Debian / Ubuntu package
+sudo dpkg -i renegadeswarm_<version>_amd64.deb
+```
+
+---
+
+## 🚀 Quick Start (Development & Building from Source)
 
 ### Prerequisites
 - **Node.js**: `>= 22.0.0`
 - **npm**: `>= 10.0.0`
 - **RenegadeCMM** (Optional, for automatic ComfyUI library synchronization): [RenegadeCMM Repository](https://github.com/DevNullInc/RenegadeCMM)
 
-### Installation
+### Setup & Run
 
 ```bash
 # 1. Clone the repository
@@ -205,15 +259,11 @@ cd RenegadeSwarm
 
 # 2. Install dependencies
 npm install
-```
 
-### Running Locally
+# 3. Launch with local management script (Windows PowerShell)
+.\rs.ps1 start
 
-```bash
-# Run the Vite UI development server
-npm run dev
-
-# Launch the full Electron desktop application
+# Or launch directly with npm
 npm run electron:dev
 ```
 
