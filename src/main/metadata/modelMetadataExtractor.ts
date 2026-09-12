@@ -60,8 +60,15 @@ export function sanitizeAndDecodeHtml(rawText?: string): string {
     .replace(/<li>/gi, '• ')
     .replace(/<\/h[1-6]>/gi, '\n\n');
 
-  // 2. Strip all remaining HTML tags
-  text = text.replace(/<[^>]*>?/gm, '');
+  // 2. Iteratively strip HTML tags and script/style blocks until fixed point (CodeQL CWE-116 multi-character sanitization)
+  let previous: string;
+  do {
+    previous = text;
+    text = text
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, '')
+      .replace(/<[^>]+>/g, '');
+  } while (text !== previous);
 
   // 3. Named HTML Entities map
   const namedEntities: Record<string, string> = {

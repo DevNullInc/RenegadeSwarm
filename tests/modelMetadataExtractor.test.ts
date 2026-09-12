@@ -146,6 +146,11 @@ describe('ModelMetadataExtractor Engine', () => {
 
     // Doubly-encoded entities
     expect(sanitizeAndDecodeHtml('&amp;lt;lora:double_encoded:1.0&amp;gt;')).toBe('<lora:double_encoded:1.0>');
+
+    // CodeQL / CWE-116 multi-character injection resilience
+    expect(sanitizeAndDecodeHtml('<script>alert("pwnd")</script>Safe Text')).toBe('Safe Text');
+    expect(sanitizeAndDecodeHtml('<script<script>>alert("pwnd")</script></script>Safe Text')).toBe('Safe Text');
+    expect(sanitizeAndDecodeHtml('<style>body { display: none; }</style>Content')).toBe('Content');
   });
 
   it('should query CivitAI and sterilize HTML entities in description, title, and trainedWords', async () => {
