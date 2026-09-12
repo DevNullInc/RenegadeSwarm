@@ -10,8 +10,6 @@
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
-    "icons:generate": "node scripts/generate-placeholder-icons.js",
-    "prebuild": "npm run icons:generate",
     "build:renderer": "tsc && vite build --base ./",
     "build:main": "tsc -p tsconfig.main.json",
     "build": "npm run build:renderer && npm run build:main",
