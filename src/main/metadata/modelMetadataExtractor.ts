@@ -43,32 +43,81 @@ export interface ExtractedModelMetadata {
 }
 
 /**
+ * Strips HTML tags and script/style blocks safely using an AST-free character scanner.
+ * Avoids regular expression multi-character sanitization vulnerabilities (CodeQL CWE-116).
+ */
+function stripHtmlTags(html: string): string {
+  let result = '';
+  let i = 0;
+  const len = html.length;
+
+  while (i < len) {
+    if (html[i] === '<') {
+      const nextChar = html[i + 1];
+      // HTML tag names must start with a letter, slash, or exclamation mark (e.g. comments/doctype)
+      if (!nextChar || !/^[a-zA-Z\/!]/.test(nextChar)) {
+        result += html[i];
+        i++;
+        continue;
+      }
+
+      const tagStart = i;
+      const tagEnd = html.indexOf('>', tagStart);
+      if (tagEnd === -1) {
+        // Unclosed tag at the end of input; discard remaining tag fragment
+        break;
+      }
+
+      const rawTagContent = html.slice(tagStart + 1, tagEnd).trim().toLowerCase();
+      const tagNameMatch = rawTagContent.match(/^\/?([a-z0-9]+)/);
+      const tagName = tagNameMatch ? tagNameMatch[1] : '';
+      const isClosing = rawTagContent.startsWith('/');
+
+      // Remove entire <script>...</script> and <style>...</style> blocks including inner content
+      if (!isClosing && (tagName === 'script' || tagName === 'style')) {
+        const closingTag = `</${tagName}>`;
+        const closeIdx = html.toLowerCase().indexOf(closingTag, tagEnd + 1);
+        if (closeIdx !== -1) {
+          i = closeIdx + closingTag.length;
+          continue;
+        } else {
+          // Unclosed script/style block — discard the rest of the string
+          break;
+        }
+      }
+
+      // Convert structural block elements to formatting newlines and bullets
+      if (tagName === 'br') {
+        result += '\n';
+      } else if (tagName === 'p' && isClosing) {
+        result += '\n\n';
+      } else if ((tagName === 'div' || tagName === 'li') && isClosing) {
+        result += '\n';
+      } else if (tagName === 'li' && !isClosing) {
+        result += '• ';
+      } else if (/^h[1-6]$/.test(tagName) && isClosing) {
+        result += '\n\n';
+      }
+
+      i = tagEnd + 1;
+    } else {
+      result += html[i];
+      i++;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Sanitizes incoming HTML text, converts breaks/paragraphs to clean newlines,
  * strips all remaining HTML tags, and thoroughly decodes all HTML entities into plaintext.
  */
 export function sanitizeAndDecodeHtml(rawText?: string): string {
   if (!rawText || typeof rawText !== 'string') return '';
 
-  let text = rawText;
-
-  // 1. Convert common break/block tags to appropriate newlines and list bullets
-  text = text
-    .replace(/<br\s*[\/]?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/div>/gi, '\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<li>/gi, '• ')
-    .replace(/<\/h[1-6]>/gi, '\n\n');
-
-  // 2. Iteratively strip HTML tags and script/style blocks until fixed point (CodeQL CWE-116 multi-character sanitization)
-  let previous: string;
-  do {
-    previous = text;
-    text = text
-      .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '')
-      .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, '')
-      .replace(/<[^>]+>/g, '');
-  } while (text !== previous);
+  // 1. Strip all HTML tags, script/style blocks, and convert block elements to newlines
+  let text = stripHtmlTags(rawText);
 
   // 3. Named HTML Entities map
   const namedEntities: Record<string, string> = {
