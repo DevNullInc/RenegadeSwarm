@@ -1,0 +1,108 @@
+{
+  "name": "renegadeswarm",
+  "version": "0.1.0",
+  "desktopName": "renegadeswarm.desktop",
+  "description": "RenegadeSwarm - Decentralized P2P AI Model Distribution Network with RenegadeCMM Integration",
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "main": "dist/main/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build:renderer": "tsc && vite build --base ./",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build": "npm run build:renderer && npm run build:main",
+    "test": "vitest run",
+    "electron:dev": "npm run build && electron .",
+    "electron:build": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --win",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "keywords": [
+    "renegadeswarm",
+    "renegadecmm",
+    "p2p",
+    "bittorrent",
+    "ai-models",
+    "comfyui",
+    "safetensors",
+    "gguf",
+    "decentralized"
+  ],
+  "author": {
+    "name": "DevNullInc (/dev/null Inc / TheStygianRenegade)",
+    "email": "admin@renegadeinc.net"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DevNullInc/RenegadeSwarm.git"
+  },
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "lucide-react": "^0.475.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sqlite3": "^6.0.1",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^4.1.11"
+  },
+  "build": {
+    "appId": "com.devnullinc.renegadeswarm",
+    "productName": "RenegadeSwarm",
+    "copyright": "Copyright (C) 2026 TheStygianRenegade / /dev/null Inc",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-v${version}.exe"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Production builds
+dist/
+dist-release/
+release/
+build/out/
+
+# Database files & logs
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+logs/
+
+# Environment and local configs
+.env
+.env.local
+.env.*.local
+*.local
+
+# IDE and OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Scratch & temporary artifacts
+scratch/
+temp/

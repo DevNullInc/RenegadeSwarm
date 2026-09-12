@@ -1,2 +1,278 @@
 # RenegadeSwarm
-RenegadeSwarm - A decentralized, torrent-style AI model distribution network. P2P model sharing with automatic organization and RenegadeCMM integration. Download, seed, and access models without gates or centralized restrictions. Community-powered repository.
+
+> **A decentralized, torrent-style AI model distribution network with automatic ComfyUI organization and seamless RenegadeCMM integration.**
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
+[![Tests](https://img.shields.io/badge/Tests-59%20Passed-brightgreen.svg)](tests/)
+[![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
+
+---
+
+## ⚡ Overview
+
+**RenegadeSwarm** is an uncensored, community-powered P2P distribution network engineered specifically for large generative AI and LLM models (Checkpoints, LoRAs, UNets, GGUFs, VAEs, Text Encoders). It empowers creators and users to seed, download, and index multi-gigabyte models without gatekeeping, centralized bandwidth throttling, rate limits, or single-point-of-failure hosting dependencies.
+
+RenegadeSwarm is designed from the ground up to work seamlessly with [**RenegadeCMM**](https://github.com/DevNullInc/RenegadeCMM), matching its ComfyUI directory hierarchies, canonical file naming standards (`model_name_author.extension`), cryptographic model hashing pipeline, and live SQLite database store.
+
+Whether you are distributing a brand-new 25GB base checkpoint or downloading community LoRAs, RenegadeSwarm ensures maximum swarm throughput, instant HTTP Web Seed fallbacks, and zero-compromise security.
+
+---
+
+## 🛡️ Zero-Trust Security & User Safety Principles
+
+Security is the fundamental pillar of RenegadeSwarm. Because P2P networks allow transfers from unknown peers, RenegadeSwarm enforces a strict **Zero-Trust Defense-in-Depth Architecture** across every layer of the application so users can run, download, and seed with 100% peace of mind:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                             UNTRUSTED P2P NETWORK                                │
+│                   (BitTorrent Peers, DHT Swarms, Web Seeds)                      │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 1. PRE-WRITE CHUNK VERIFICATION (In-Memory SHA256 per Piece)                     │
+│    • Corrupt or poisoned pieces dropped before touching the filesystem           │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 2. QUARANTINE ISOLATION STAGING (`.quarantine/*.part`)                           │
+│    • Incomplete transfers completely isolated from ComfyUI                       │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 3. MULTI-PASS CONTENT & POLYGLOT VALIDATOR                                       │
+│    • SafeTensors / GGUF / ONNX / PyTorch magic byte & header verification        │
+│    • Executable rejection (PE `MZ`, ELF `\x7fELF`, Mach-O, scripts)              │
+│    • Anti-Polyglot defense (ZIP `PK\x03\x04` header detection)                   │
+│    • Full-file SHA256 digest validation                                          │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │ Pass
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ 4. ATOMIC PROMOTION & CMM INTEGRATION                                            │
+│    • Atomic rename into canonical folder (`checkpoints/`, `loras/`, etc.)        │
+│    • Direct commit to `renegadecmm.sqlite` via SQLite `ATTACH DATABASE`          │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 1. Hardened Process Boundary Isolation
+* **100% Sandboxed Renderer**: The user interface runs strictly within an isolated Webview (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`).
+* **Zero Direct OS/Disk Access**: The renderer process has zero access to Node.js runtime globals, file system handles, child-process spawners, or raw sockets.
+* **Zod-Validated IPC Contracts**: Every message crossing the Electron IPC boundary is strictly validated against strict Zod runtime schemas (`src/shared/ipcContracts.ts`). Any malformed or unauthorized payload is rejected immediately.
+
+### 2. Multi-Pass Zero-Masquerade Content Validation
+RenegadeSwarm is built exclusively for AI models. It inspects all payloads at the byte level before they are allowed anywhere near your system:
+* **Deep Magic-Byte Inspection**: Validates SafeTensors 8-byte uint64 headers, GGUF magic bytes (`GGUF\x03\x00\x00\x00`), ONNX Protobuf signatures, and PyTorch serialization headers.
+* **Strict Anti-Polyglot Defense**: Blocks ZIP archive headers (`PK\x03\x04`) and archive bombs masquerading as valid tensor weights.
+* **Zero Executable Tolerance**: Instantly identifies and rejects Windows PE (`MZ`, `.exe`, `.dll`), Linux ELF (`\x7fELF`), macOS Mach-O, shell scripts (`.sh`, `.bat`, `.ps1`), Python source files (`.py`), and video/media containers (`.mkv`, `.mp4`).
+
+### 3. Quarantine Isolation State Machine
+* All incoming data is written with temporary `.part` suffixes inside a dedicated, isolated `.quarantine/` directory.
+* Files remain quarantined until the transfer reaches 100%, passes in-memory piece SHA256 checks, passes full-file SHA256 verification, and clears deep content inspection.
+* Only after all safety gates pass is the file atomically renamed and promoted to your active ComfyUI models directory.
+
+### 4. Cryptographic Provenance & Web of Trust (Ed25519)
+* Manifests are signed by model creators using 32-byte **Ed25519** public keys.
+* The digital signature binds the model's metadata, title, author, and file SHA256 digest directly to the BitTorrent `infoHash`.
+* Downloader clients verify signatures against the local Keyring and Web-of-Trust tiers (`VerifiedCreator`, `Community`, `Untrusted`, `Blocked`). See [Web of Trust Guide](docs/WEB_OF_TRUST.md) for details.
+
+### 5. Swarm & DHT Sybil Attack Hardening
+* **BEP 42 Node ID Verification**: Validates IP-derived hashes on incoming DHT nodes to prevent Sybil routing table poisoning.
+* **Pinned Swarms & Query Throttling**: Rate-limits DHT maintenance queries (<5 KB/s idle) and isolates active swarm lookups.
+* **Pre-Write Piece SHA256 Verification**: Every downloaded piece is verified in memory before disk allocation, completely neutralizing piece-poisoning attacks.
+
+### 6. Directory Traversal & Injection Defense
+* File entries inside manifests are sanitized and validated against directory traversal attacks (`../`, `..\\`, absolute paths).
+* File names are forced into canonical ComfyUI naming conventions: `^[a-zA-Z0-9_-]+_[a-zA-Z0-9_-]+\.(safetensors|gguf|bin|pt|onnx)$` (`model_name_author.extension`).
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+|---|---|
+| 🚀 **50GB+ Memory-Safe Streaming** | Tuned random-access disk streaming with pre-write in-memory SHA256 chunk verification prevents buffer fragmentation on multi-gigabyte models. |
+| 🛡️ **Zero-Masquerade Content Validation** | Deep magic-byte inspection strictly validates SafeTensors, GGUF, ONNX, and PyTorch headers while rejecting executables, scripts, media, and polyglots. |
+| 🔑 **Ed25519 Creator Provenance** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`, guaranteeing authenticity and preventing tampering. |
+| ⚡ **Atomic RenegadeCMM Bridge** | SQLite `ATTACH DATABASE` synchronization commits downloads directly into ComfyUI folder structures (`checkpoints/`, `loras/`, `vae/`) with zero sync lag. |
+| 🌐 **BEP 19 Web Seed Bootstrapping** | New swarms bootstrap immediately from Hugging Face or CivitAI HTTP endpoints while transitioning seamlessly into decentralized P2P sharing. |
+| 💻 **Cyberpunk Desktop UI & Tray** | Dark-themed dashboard with real-time transfer graphs, background tray seeding, and customizable ratio governance (e.g. auto-halt at 2.0x). |
+
+---
+
+## 📁 Project Architecture
+
+```
+RenegadeSwarm/
+├── docs/                       # Technical specifications and developer guides
+│   ├── MANIFEST_SPEC.md        # .swarm manifest schema & piece sizing matrix
+│   ├── SIGNING_GUIDE.md        # Ed25519 key generation, signing & creator provenance
+│   ├── WEB_OF_TRUST.md         # Keyring tiers, discovery & Web of Trust model
+│   └── TROUBLESHOOTING.md      # Diagnostics, NAT traversal, quarantine rejection codes
+├── src/
+│   ├── protocol/               # Pure TypeScript protocol layer (Universal / No Node/Electron APIs)
+│   │   ├── types.ts            # Core protocol interfaces & data models
+│   │   ├── validation.ts       # Zod schemas & canonical naming validators
+│   │   ├── crypto.ts           # Ed25519 signing, verification & piece hashing
+│   │   ├── manifest.ts         # Manifest parsing, serialization & magnet URI generation
+│   │   ├── contentValidator.ts # Magic byte inspection, polyglot & executable defense
+│   │   ├── keyring.ts          # Web-of-Trust engine & trusted creator key store
+│   │   └── wireProtocol.ts     # BEP 3 BitTorrent wire protocol framing & bitfields
+│   ├── main/                   # Privileged Electron Core
+│   │   ├── index.ts            # App lifecycle, single-instance lock & window management
+│   │   ├── preload.ts          # Capability-scoped Context Bridge
+│   │   ├── ipcHandlers.ts      # Zod-validated IPC handler registry
+│   │   ├── tray.ts             # System tray manager for 24/7 background seeding
+│   │   ├── engine/             # P2P Engine & Storage Layer
+│   │   │   ├── swarmEngine.ts        # Swarm coordinator & active transfer manager
+│   │   │   ├── syncQueue.ts          # Quarantine state machine & atomic promoter
+│   │   │   ├── pieceStreamEngine.ts  # Tuned highWaterMark disk writer
+│   │   │   ├── peerManager.ts        # Peer pool, Tit-for-Tat upload ranking & optimistic unchoking
+│   │   │   ├── bandwidthScheduler.ts # Token Bucket rate limiter & seeding ratio governor
+│   │   │   ├── dhtHardening.ts       # BEP 42 Sybil defense & DHT query limiter
+│   │   │   ├── daemonRpcEngine.ts    # JSON-RPC adapter for transmission-daemon / rqbit sidecars
+│   │   │   ├── contentInspector.ts   # Quarantine header reader & extension resolver
+│   │   │   └── manifestBuilder.ts    # SHA256 & info-hash builder with Web Seeds
+│   │   └── cmm/                # RenegadeCMM Integration
+│   │       ├── cmmDbBridge.ts        # Non-blocking SQLite bridge with ATTACH DATABASE
+│   │       └── cmmFolderRouter.ts    # ComfyUI directory router & traversal protection
+│   ├── shared/                 # Shared contracts & types between main and renderer
+│   │   ├── cmmTypes.ts         # ComfyUI folders, file types, security whitelists
+│   │   ├── ipcContracts.ts     # Type-safe IPC channels & request/response schemas
+│   │   └── swarmProtocol.ts    # Swarm manifest schema, hashes & peer metrics
+│   └── renderer/               # Desktop UI (React, Vite, Dark Cyberpunk Theme)
+│       ├── App.tsx             # Main application layout & live telemetry coordinator
+│       ├── components/         # Swarm Monitor, Seeder, CMM Bridge, Bandwidth views
+│       └── styles/             # Design tokens & glassmorphism styling
+└── tests/                      # Vitest test suite (15 suites, 59 unit tests)
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- **Node.js**: `>= 22.0.0`
+- **npm**: `>= 10.0.0`
+- **RenegadeCMM** (Optional, for automatic ComfyUI library synchronization): [RenegadeCMM Repository](https://github.com/DevNullInc/RenegadeCMM)
+
+### Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/DevNullInc/RenegadeSwarm.git
+cd RenegadeSwarm
+
+# 2. Install dependencies
+npm install
+```
+
+### Running Locally
+
+```bash
+# Run the Vite UI development server
+npm run dev
+
+# Launch the full Electron desktop application
+npm run electron:dev
+```
+
+### Trusted Creator Setup
+RenegadeSwarm pre-seeds trusted root keys for `@TheStygianRenegade` and `@DevNullInc`. To add your own trusted creators, navigate to **Settings → Trusted Creators & Keyring** in the desktop application or see the [**Web of Trust Guide**](docs/WEB_OF_TRUST.md).
+
+### Running the Test Suite
+
+```bash
+npm test
+```
+
+---
+
+## 🛠️ Programmatic Usage (Protocol SDK)
+
+RenegadeSwarm exports a pure TypeScript protocol layer (`src/protocol/`) with zero Node.js/Electron API dependencies, making it suitable for CLI tools, web workers, and CI pipelines.
+
+```typescript
+import { buildSwarmManifest } from './src/main/engine/manifestBuilder';
+import { generateEd25519KeyPair, signSwarmManifest, verifySwarmManifestSignature } from './src/protocol/crypto';
+import { generateMagnetUri, serializeSwarmManifest } from './src/protocol/manifest';
+
+// 1. Generate an Ed25519 keypair for model signing
+const { publicKeyHex, privateKeyHex } = generateEd25519KeyPair();
+
+// 2. Construct the model manifest with Web Seeds
+const manifest = await buildSwarmManifest({
+  modelFilePath: 'D:/models/FLUX_1_Dev_Cyberpunk_TheStygianRenegade.safetensors',
+  title: 'FLUX.1-Dev Cyberpunk',
+  version: '1.0.0',
+  modelType: 'LORA',
+  baseModel: 'Flux.1 D',
+  creator: 'TheStygianRenegade',
+  creatorPublicKey: publicKeyHex,
+  urlList: [
+    'https://huggingface.co/TheStygianRenegade/flux-cyberpunk/resolve/main/FLUX_1_Dev_Cyberpunk_TheStygianRenegade.safetensors'
+  ],
+});
+
+// 3. Cryptographically sign the manifest
+manifest.signature = signSwarmManifest(manifest, privateKeyHex, publicKeyHex);
+
+// 4. Validate signature before distribution
+const isVerified = verifySwarmManifestSignature(manifest);
+console.log('Manifest Verified:', isVerified);
+
+// 5. Generate standard BitTorrent magnet link with Web Seeds
+const magnetUri = generateMagnetUri(manifest);
+console.log('Shareable Magnet Link:', magnetUri);
+```
+
+---
+
+## 📚 Documentation
+
+Detailed technical specifications and operational guides are available in the [`docs/`](docs/) directory:
+
+- [**Manifest Specification (`docs/MANIFEST_SPEC.md`)**](docs/MANIFEST_SPEC.md) — Complete specification of the `.swarm` metadata schema, piece sizing formulas, and hash algorithms.
+- [**Signing & Provenance Guide (`docs/SIGNING_GUIDE.md`)**](docs/SIGNING_GUIDE.md) — Guide to generating Ed25519 keys, signing models, and cryptographic verification.
+- [**Web of Trust Guide (`docs/WEB_OF_TRUST.md`)**](docs/WEB_OF_TRUST.md) — Detailed guide on key distribution, trust levels, TOFU verification, and keyring import/export.
+- [**Troubleshooting Guide (`docs/TROUBLESHOOTING.md`)**](docs/TROUBLESHOOTING.md) — Operational solutions for NAT traversal, quarantine rejections, and CMM database locks.
+
+---
+
+## 📦 Building for Production
+
+```bash
+# Package for Windows (NSIS Installer & Portable Executable)
+npm run dist:win
+
+# Package for Linux (AppImage & tar.gz)
+npm run dist:linux
+
+# Package for macOS (DMG)
+npm run dist:mac
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these standards:
+1. Ensure all new IPC contracts or manifest fields are validated with **Zod**.
+2. Run `npm test` before submitting pull requests.
+3. Adhere to sandboxed process isolation rules (no privileged Node APIs in the renderer).
+
+---
+
+## ⚖️ Usage Compliance
+
+RenegadeSwarm is a neutral distribution protocol. Users are responsible for complying with local laws regarding data sharing, copyright, and AI model distribution. The content validation filters are technical safeguards, not legal guarantees.
+
+---
+
+## 📜 License
+
+Licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). See [`LICENSE`](LICENSE) for details.
