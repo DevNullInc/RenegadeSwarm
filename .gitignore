@@ -32,3 +32,6 @@ Thumbs.db
 scratch/
 temp/
 scripts/generate-placeholder-icons.js
+*.pid
+.installed
+rs.ps1
