@@ -39,17 +39,46 @@ export interface CmmLocalModelRow {
   quantization?: string;
 }
 
+export interface CmmStatusResult {
+  connected: boolean;
+  dbPath: string;
+  modelCount: number;
+  isProcessRunning: boolean;
+  lastChecked: number;
+}
+
 export class CmmDbBridge {
   private localDb: sqlite3.Database | null = null;
   private localDbPath: string;
   private cmmDbPath: string = '';
   private isAttached: boolean = false;
+  private lastStatusResult: CmmStatusResult | null = null;
 
   constructor(localDbPath?: string, cmmDbPath?: string) {
     this.localDbPath = localDbPath || path.join(process.cwd(), 'renegadeswarm.sqlite');
     if (cmmDbPath) {
       this.cmmDbPath = cmmDbPath;
+    } else {
+      this.cmmDbPath = this.discoverCmmDbPath();
     }
+  }
+
+  discoverCmmDbPath(): string {
+    const candidatePaths = [
+      'D:/gitprojects/RenegadeCMM/renegadecmm.sqlite',
+      'D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite',
+      path.join(process.cwd(), '..', 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(process.cwd(), 'renegadecmm.sqlite'),
+      path.join(process.env.APPDATA || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(process.env.HOME || '', '.config', 'renegadecmm', 'renegadecmm.sqlite'),
+    ];
+
+    for (const p of candidatePaths) {
+      if (p && fs.existsSync(p)) {
+        return path.resolve(p);
+      }
+    }
+    return '';
   }
 
   setCmmDbPath(targetPath: string) {
@@ -58,7 +87,91 @@ export class CmmDbBridge {
   }
 
   getCmmDbPath(): string {
+    if (!this.cmmDbPath) {
+      this.cmmDbPath = this.discoverCmmDbPath();
+    }
     return this.cmmDbPath;
+  }
+
+  /**
+   * Performs an active health check on RenegadeCMM availability, process state, and database connectivity.
+   */
+  async checkCmmStatus(): Promise<CmmStatusResult> {
+    const dbPath = this.getCmmDbPath();
+    const now = Date.now();
+
+    if (!dbPath || !fs.existsSync(dbPath)) {
+      this.isAttached = false;
+      this.lastStatusResult = {
+        connected: false,
+        dbPath: dbPath || '',
+        modelCount: 0,
+        isProcessRunning: false,
+        lastChecked: now,
+      };
+      return this.lastStatusResult;
+    }
+
+    // Check if CMM process is actively running via PID file
+    let isProcessRunning = false;
+    const cmmDir = path.dirname(dbPath);
+    const pidPath = path.join(cmmDir, '.cmm.pid');
+    if (fs.existsSync(pidPath)) {
+      try {
+        const pidStr = fs.readFileSync(pidPath, 'utf8').trim();
+        const pid = parseInt(pidStr, 10);
+        if (!isNaN(pid)) {
+          process.kill(pid, 0); // Check if process is alive (signal 0)
+          isProcessRunning = true;
+        }
+      } catch {
+        isProcessRunning = false;
+      }
+    }
+
+    // Verify database connectivity and retrieve active model count
+    try {
+      const ok = await this.attachCmmDatabase(dbPath);
+      if (!ok) {
+        this.lastStatusResult = {
+          connected: false,
+          dbPath,
+          modelCount: 0,
+          isProcessRunning,
+          lastChecked: now,
+        };
+        return this.lastStatusResult;
+      }
+
+      const modelCount = await new Promise<number>((resolve) => {
+        this.localDb?.get(
+          'SELECT COUNT(*) as count FROM cmm.local_models;',
+          (err, row: any) => {
+            if (err) resolve(0);
+            else resolve(row?.count || 0);
+          }
+        );
+      });
+
+      this.lastStatusResult = {
+        connected: true,
+        dbPath,
+        modelCount,
+        isProcessRunning,
+        lastChecked: now,
+      };
+      return this.lastStatusResult;
+    } catch {
+      this.isAttached = false;
+      this.lastStatusResult = {
+        connected: false,
+        dbPath,
+        modelCount: 0,
+        isProcessRunning: false,
+        lastChecked: now,
+      };
+      return this.lastStatusResult;
+    }
   }
 
   async initLocalDb(): Promise<void> {

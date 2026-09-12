@@ -117,6 +117,29 @@ export function registerIpcHandlers() {
   });
 
   // 3. RenegadeCMM Bridge
+  ipcMain.handle('cmm:getStatus', async (): Promise<IpcResponse> => {
+    try {
+      const status = await cmmDbBridge.checkCmmStatus();
+      return { success: true, data: status };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:configureSync', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { cmmDbPath, comfyModelsRoot } = CmmSyncConfigRequestSchema.parse(raw);
+      cmmDbBridge.setCmmDbPath(cmmDbPath);
+      if (comfyModelsRoot) {
+        cmmFolderRouter.updateConfig({ rootPath: comfyModelsRoot });
+      }
+      const status = await cmmDbBridge.checkCmmStatus();
+      return { success: status.connected, data: status };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('cmm:getModels', async (): Promise<IpcResponse> => {
     try {
       const models = await cmmDbBridge.getLocalModels(200);

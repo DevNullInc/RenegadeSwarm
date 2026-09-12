@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, Menu, shell } from 'electron';
 import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { trayManager } from './tray';
@@ -39,6 +39,9 @@ if (!gotTheLock) {
 }
 
 async function createWindow() {
+  // Disable application and window menu bar completely
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -47,6 +50,7 @@ async function createWindow() {
     backgroundColor: '#0c0e14',
     title: 'RenegadeSwarm - P2P AI Model Distribution',
     frame: true,
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -56,6 +60,8 @@ async function createWindow() {
       webSecurity: true,
     },
   });
+
+  mainWindow.setMenu(null);
 
   registerIpcHandlers();
   await swarmEngine.init();

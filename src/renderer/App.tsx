@@ -39,6 +39,17 @@ declare global {
       getBandwidthSettings: () => Promise<{ success: boolean; data?: BandwidthSettings; error?: string }>;
       updateBandwidthSettings: (settings: Partial<BandwidthSettings>) => Promise<{ success: boolean; data?: BandwidthSettings; error?: string }>;
       getBandwidthStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+      getCmmStatus: () => Promise<{
+        success: boolean;
+        data?: {
+          connected: boolean;
+          dbPath: string;
+          modelCount: number;
+          isProcessRunning: boolean;
+          lastChecked: number;
+        };
+        error?: string;
+      }>;
       getCmmModels: () => Promise<{ success: boolean; data?: CmmLocalModelRow[]; error?: string }>;
       configureCmmSync: (req: any) => Promise<{ success: boolean; data?: any; error?: string }>;
       getSharingPolicy: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
@@ -66,6 +77,7 @@ export default function App() {
   const [uploadSpeedStr, setUploadSpeedStr] = useState('0 MB/s');
   const [cmmModels, setCmmModels] = useState<CmmLocalModelRow[]>([]);
   const [cmmConnected, setCmmConnected] = useState(false);
+  const [cmmModelCount, setCmmModelCount] = useState(0);
   const [cmmDbPath, setCmmDbPath] = useState('D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [comfyModelsRoot, setComfyModelsRoot] = useState('D:\\ComfyUI\\models');
 
@@ -87,55 +99,31 @@ export default function App() {
         setDownloadSpeedStr(formatSpeed(stats.data.currentDownloadSpeedBps));
         setUploadSpeedStr(formatSpeed(stats.data.currentUploadSpeedBps));
       }
-    } else {
-      // Standalone browser preview mode mock data
-      setTorrents([
-        {
-          infoHash: '4a5c88b2e118b6284f18b3ec48866164287d3d2a',
-          manifestId: 'm-1',
-          title: 'FLUX.1 [dev] fp8 quantized',
-          modelType: 'Checkpoint',
-          baseModel: 'Flux.1 D',
-          state: 'downloading',
-          queueState: 'Active',
-          totalBytes: 12500000000,
-          downloadedBytes: 8100000000,
-          uploadedBytes: 1200000000,
-          downloadSpeedBps: 24 * 1024 * 1024,
-          uploadSpeedBps: 3.5 * 1024 * 1024,
-          progressRatio: 0.648,
-          peersConnected: 34,
-          seedersConnected: 18,
-          ratio: 0.15,
-          etaSeconds: 180,
-          savePath: 'D:\\ComfyUI\\models\\checkpoints',
-          cmmSynced: false,
-        },
-        {
-          infoHash: '9b7f32a1e442c8192a01b5de78891024567a8bc1',
-          manifestId: 'm-2',
-          title: 'SDXL-Cyberpunk-LoRA-v2',
-          modelType: 'LORA',
-          baseModel: 'SDXL 1.0',
-          state: 'seeding',
-          queueState: 'Verified',
-          totalBytes: 245000000,
-          downloadedBytes: 245000000,
-          uploadedBytes: 1250000000,
-          downloadSpeedBps: 0,
-          uploadSpeedBps: 6.2 * 1024 * 1024,
-          progressRatio: 1.0,
-          peersConnected: 14,
-          seedersConnected: 5,
-          ratio: 5.1,
-          etaSeconds: null,
-          savePath: 'D:\\ComfyUI\\models\\loras',
-          cmmSynced: true,
-        },
-      ]);
-      setDownloadSpeedStr('24.0 MB/s');
-      setUploadSpeedStr('9.7 MB/s');
-      setCmmConnected(true);
+    }
+  };
+
+  const checkCmmStatus = async () => {
+    if (window.renegadeSwarm) {
+      try {
+        const res = await window.renegadeSwarm.getCmmStatus();
+        if (res.success && res.data) {
+          const wasConnected = cmmConnected;
+          const isNowConnected = res.data.connected;
+          setCmmConnected(isNowConnected);
+          setCmmModelCount(res.data.modelCount || 0);
+
+          if (res.data.dbPath && res.data.dbPath !== cmmDbPath) {
+            setCmmDbPath(res.data.dbPath);
+          }
+
+          // If CMM status newly transitioned to connected or count changed, auto-refresh models
+          if (!wasConnected && isNowConnected) {
+            fetchCmmModels();
+          }
+        }
+      } catch {
+        setCmmConnected(false);
+      }
     }
   };
 
@@ -144,6 +132,10 @@ export default function App() {
       const res = await window.renegadeSwarm.getCmmModels();
       if (res.success && res.data) {
         setCmmModels(res.data);
+        setCmmModelCount(res.data.length);
+        if (res.data.length > 0) {
+          setCmmConnected(true);
+        }
       }
     }
   };
@@ -159,10 +151,26 @@ export default function App() {
 
   useEffect(() => {
     fetchTorrents();
+    checkCmmStatus();
     fetchCmmModels();
     fetchSharingPolicy();
-    const interval = setInterval(fetchTorrents, 1000);
-    return () => clearInterval(interval);
+
+    // 1-second interval for real-time torrent telemetry
+    const torrentInterval = setInterval(fetchTorrents, 1000);
+    // 5-second polling check to detect if CMM is running/connected on the machine
+    const cmmInterval = setInterval(checkCmmStatus, 5000);
+
+    const onFocus = () => {
+      checkCmmStatus();
+      fetchTorrents();
+    };
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(torrentInterval);
+      clearInterval(cmmInterval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   const handleAddMagnet = async (magnetUri: string) => {
@@ -266,6 +274,7 @@ export default function App() {
         downloadSpeed={downloadSpeedStr}
         uploadSpeed={uploadSpeedStr}
         cmmConnected={cmmConnected}
+        cmmModelCount={cmmModelCount}
       />
 
       <main style={{ flex: 1, overflow: 'hidden' }}>

@@ -35,6 +35,7 @@ export interface RenegadeSwarmApi {
   getBandwidthSettings: () => Promise<any>;
   updateBandwidthSettings: (settings: Partial<BandwidthSettings>) => Promise<any>;
   getBandwidthStats: () => Promise<any>;
+  getCmmStatus: () => Promise<any>;
   getCmmModels: () => Promise<any>;
   configureCmmSync: (req: CmmSyncConfigRequest) => Promise<any>;
   getSharingPolicy: () => Promise<any>;
@@ -52,6 +53,7 @@ const api: RenegadeSwarmApi = {
   getBandwidthSettings: () => ipcRenderer.invoke('bandwidth:getSettings'),
   updateBandwidthSettings: (settings) => ipcRenderer.invoke('bandwidth:updateSettings', settings),
   getBandwidthStats: () => ipcRenderer.invoke('bandwidth:getStats'),
+  getCmmStatus: () => ipcRenderer.invoke('cmm:getStatus'),
   getCmmModels: () => ipcRenderer.invoke('cmm:getModels'),
   configureCmmSync: (req) => ipcRenderer.invoke('cmm:configureSync', req),
   getSharingPolicy: () => ipcRenderer.invoke('sharing:getPolicy'),

@@ -34,6 +34,7 @@ interface NavbarProps {
   downloadSpeed: string;
   uploadSpeed: string;
   cmmConnected: boolean;
+  cmmModelCount?: number;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   downloadSpeed,
   uploadSpeed,
   cmmConnected,
+  cmmModelCount = 0,
 }) => {
   const tabs = [
     { id: 'dashboard' as TabId, label: 'Swarm Monitor', icon: Activity },
@@ -60,33 +62,31 @@ export const Navbar: React.FC<NavbarProps> = ({
       background: '#0d1117'
     }}>
       {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{
           width: '32px',
           height: '32px',
           borderRadius: '8px',
-          background: 'linear-gradient(135deg, #9333ea, #06b6d4)',
+          background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: '#fff',
-          fontWeight: 800,
-          boxShadow: '0 0 12px rgba(147, 51, 234, 0.4)'
+          boxShadow: '0 0 12px rgba(168, 85, 247, 0.4)',
         }}>
-          <Radio size={18} />
+          <Radio size={18} color="#fff" />
         </div>
         <div>
-          <h1 style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.02em' }}>
-            Renegade<span style={{ color: '#a855f7' }}>Swarm</span>
+          <h1 style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px', margin: 0, color: '#fff' }}>
+            Renegade<span style={{ color: 'var(--accent-purple)' }}>Swarm</span>
           </h1>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-            P2P Decentralized Model Network
-          </div>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>
+            P2P AI Model Distribution Network
+          </span>
         </div>
       </div>
 
-      {/* Tabs */}
-      <nav style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      {/* Navigation Tabs */}
+      <nav style={{ display: 'flex', gap: '4px' }}>
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -117,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         })}
       </nav>
 
-      {/* Live Swarm Telemetry */}
+      {/* Live Swarm Telemetry & CMM Detection Badge */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px' }} className="mono">
           <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -128,20 +128,36 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          fontSize: '11px',
-          padding: '4px 10px',
-          borderRadius: '20px',
-          background: cmmConnected ? 'rgba(16, 185, 129, 0.1)' : 'rgba(244, 63, 94, 0.1)',
-          color: cmmConnected ? '#10b981' : '#f43f5e',
-          border: `1px solid ${cmmConnected ? 'rgba(16, 185, 129, 0.2)' : 'rgba(244, 63, 94, 0.2)'}`,
-        }}>
+        <button
+          onClick={() => onSelectTab('cmm')}
+          title={cmmConnected ? `RenegadeCMM Detected & Connected (${cmmModelCount} local models). Click to view.` : 'RenegadeCMM Not Detected. Click to configure path or auto-detect.'}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '11px',
+            padding: '4px 10px',
+            borderRadius: '20px',
+            background: cmmConnected ? 'rgba(16, 185, 129, 0.12)' : 'rgba(244, 63, 94, 0.12)',
+            color: cmmConnected ? '#10b981' : '#f43f5e',
+            border: `1px solid ${cmmConnected ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <span style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: cmmConnected ? '#10b981' : '#f43f5e',
+            boxShadow: cmmConnected ? '0 0 8px #10b981' : 'none',
+            display: 'inline-block',
+          }} />
           <ShieldCheck size={12} />
-          <span>{cmmConnected ? 'CMM Synced' : 'CMM Offline'}</span>
-        </div>
+          <span style={{ fontWeight: 600 }}>
+            {cmmConnected ? `CMM Connected (${cmmModelCount})` : 'CMM Offline'}
+          </span>
+        </button>
       </div>
     </header>
   );
