@@ -88,6 +88,48 @@ export function registerIpcHandlers() {
     }
   });
 
+  ipcMain.handle('dialog:openDirectory', async (_, rawOptions?: unknown): Promise<IpcResponse> => {
+    try {
+      const opts = (typeof rawOptions === 'object' && rawOptions !== null) ? (rawOptions as any) : {};
+      const result = await dialog.showOpenDialog({
+        title: opts.title || 'Select Model Directory',
+        buttonLabel: 'Select Directory',
+        properties: ['openDirectory', 'createDirectory'],
+        defaultPath: opts.defaultPath,
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, error: 'Directory selection canceled' };
+      }
+
+      return { success: true, data: { folderPath: result.filePaths[0] } };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('dialog:openSqliteFile', async (): Promise<IpcResponse> => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select RenegadeCMM SQLite Database (renegadecmm.sqlite)',
+        buttonLabel: 'Select Database',
+        properties: ['openFile'],
+        filters: [
+          { name: 'SQLite Database (*.sqlite, *.db)', extensions: ['sqlite', 'db', 'sqlite3'] },
+          { name: 'All Files (*.*)', extensions: ['*'] },
+        ],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, error: 'File selection canceled' };
+      }
+
+      return { success: true, data: { filePath: result.filePaths[0] } };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
   ipcMain.handle('model:extractMetadata', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       if (typeof raw !== 'string') throw new Error('Invalid file path');
@@ -179,10 +221,28 @@ export function registerIpcHandlers() {
     return { success: true, data: bandwidthScheduler.getStats(dls, seeds) };
   });
 
-  // 3. RenegadeCMM Bridge
+  // 3. RenegadeCMM Bridge & Model Folder Management
   ipcMain.handle('cmm:getStatus', async (): Promise<IpcResponse> => {
     try {
       const status = await cmmDbBridge.checkCmmStatus();
+      if (status.connected) {
+        if (status.comfyuiFolders || status.comfyuiRoot) {
+          cmmFolderRouter.syncCmmFolders(status.comfyuiFolders || [], status.comfyuiRoot);
+        }
+        if (status.folderMappings) {
+          cmmFolderRouter.updateConfig({ folderMappings: status.folderMappings });
+        }
+      }
+      // Load persisted settings
+      const persisted = await cmmDbBridge.getPersistedAppSettings();
+      if (persisted.customFolders && persisted.customFolders.length > 0) {
+        for (const cf of persisted.customFolders) {
+          cmmFolderRouter.addCustomFolder(cf);
+        }
+      }
+      if (persisted.defaultFolder) {
+        cmmFolderRouter.setDefaultDownloadFolder(persisted.defaultFolder);
+      }
       return { success: true, data: status };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -191,13 +251,117 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('cmm:configureSync', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
-      const { cmmDbPath, comfyModelsRoot } = CmmSyncConfigRequestSchema.parse(raw);
+      const { cmmDbPath, comfyModelsRoot, defaultDownloadFolder } = CmmSyncConfigRequestSchema.parse(raw);
       cmmDbBridge.setCmmDbPath(cmmDbPath);
       if (comfyModelsRoot) {
         cmmFolderRouter.updateConfig({ rootPath: comfyModelsRoot });
       }
+      if (defaultDownloadFolder) {
+        cmmFolderRouter.setDefaultDownloadFolder(defaultDownloadFolder);
+      }
       const status = await cmmDbBridge.checkCmmStatus();
+      if (status.connected && (status.comfyuiFolders || status.comfyuiRoot)) {
+        cmmFolderRouter.syncCmmFolders(status.comfyuiFolders || [], status.comfyuiRoot);
+      }
       return { success: status.connected, data: status };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:getModelFolders', async (): Promise<IpcResponse> => {
+    try {
+      const entries = cmmFolderRouter.getModelFolderEntries();
+      const cfg = cmmFolderRouter.getConfig();
+      return {
+        success: true,
+        data: {
+          folders: entries,
+          defaultFolder: cfg.defaultDownloadFolder || cfg.rootPath || (entries[0]?.path || ''),
+          rootPath: cfg.rootPath,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:addModelFolder', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      if (typeof raw !== 'string' || !raw.trim()) {
+        throw new Error('Valid folder path is required');
+      }
+      const ok = cmmFolderRouter.addCustomFolder(raw.trim());
+      if (!ok) {
+        throw new Error('Folder is already in the model folders list or invalid.');
+      }
+      // Persist to DB
+      const cfg = cmmFolderRouter.getConfig();
+      await cmmDbBridge.savePersistedAppSettings({
+        customFolders: cfg.customFolders,
+        defaultFolder: cfg.defaultDownloadFolder,
+      });
+
+      const entries = cmmFolderRouter.getModelFolderEntries();
+      return {
+        success: true,
+        data: {
+          folders: entries,
+          defaultFolder: cfg.defaultDownloadFolder,
+          rootPath: cfg.rootPath,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:removeModelFolder', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      if (typeof raw !== 'string' || !raw.trim()) {
+        throw new Error('Valid folder path is required');
+      }
+      cmmFolderRouter.removeModelFolder(raw.trim());
+      const cfg = cmmFolderRouter.getConfig();
+      await cmmDbBridge.savePersistedAppSettings({
+        customFolders: cfg.customFolders,
+        defaultFolder: cfg.defaultDownloadFolder,
+      });
+
+      const entries = cmmFolderRouter.getModelFolderEntries();
+      return {
+        success: true,
+        data: {
+          folders: entries,
+          defaultFolder: cfg.defaultDownloadFolder,
+          rootPath: cfg.rootPath,
+        },
+      };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:setDefaultDownloadFolder', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      if (typeof raw !== 'string' || !raw.trim()) {
+        throw new Error('Valid folder path is required');
+      }
+      const ok = cmmFolderRouter.setDefaultDownloadFolder(raw.trim());
+      const cfg = cmmFolderRouter.getConfig();
+      await cmmDbBridge.savePersistedAppSettings({
+        defaultFolder: cfg.defaultDownloadFolder,
+      });
+
+      const entries = cmmFolderRouter.getModelFolderEntries();
+      return {
+        success: ok,
+        data: {
+          folders: entries,
+          defaultFolder: cfg.defaultDownloadFolder,
+          rootPath: cfg.rootPath,
+        },
+      };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

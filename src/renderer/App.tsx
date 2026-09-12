@@ -58,6 +58,12 @@ declare global {
       toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<{ success: boolean; data?: any; error?: string }>;
       browseModelFile: () => Promise<{ success: boolean; data?: { filePath: string; metadata: any }; error?: string }>;
       browsePreviewFile: () => Promise<{ success: boolean; data?: { filePath: string }; error?: string }>;
+      browseDirectory: (options?: { title?: string; defaultPath?: string }) => Promise<{ success: boolean; data?: { folderPath: string }; error?: string }>;
+      browseSqliteFile: () => Promise<{ success: boolean; data?: { filePath: string }; error?: string }>;
+      getModelFolders: () => Promise<{ success: boolean; data?: { folders: import('../shared/ipcContracts').ModelFolderEntry[]; defaultFolder: string; rootPath: string }; error?: string }>;
+      addModelFolder: (folderPath: string) => Promise<{ success: boolean; data?: { folders: import('../shared/ipcContracts').ModelFolderEntry[]; defaultFolder: string; rootPath: string }; error?: string }>;
+      removeModelFolder: (folderPath: string) => Promise<{ success: boolean; data?: { folders: import('../shared/ipcContracts').ModelFolderEntry[]; defaultFolder: string; rootPath: string }; error?: string }>;
+      setDefaultDownloadFolder: (folderPath: string) => Promise<{ success: boolean; data?: { folders: import('../shared/ipcContracts').ModelFolderEntry[]; defaultFolder: string; rootPath: string }; error?: string }>;
       extractModelMetadata: (filePath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
       getKeyringEntries: () => Promise<{ success: boolean; data?: any[]; error?: string }>;
       addKeyringEntry: (entry: any) => Promise<{ success: boolean; data?: any[]; error?: string }>;
@@ -189,9 +195,9 @@ export default function App() {
     };
   }, []);
 
-  const handleAddMagnet = async (magnetUri: string) => {
+  const handleAddMagnet = async (magnetUri: string, customDestination?: string) => {
     if (window.renegadeSwarm) {
-      await window.renegadeSwarm.addMagnet({ magnetUri, autoOrganizeComfy: true });
+      await window.renegadeSwarm.addMagnet({ magnetUri, customDestination, autoOrganizeComfy: true });
       fetchTorrents();
     }
   };
@@ -230,16 +236,18 @@ export default function App() {
     return {} as any;
   };
 
-  const handleSyncCmmConfig = async (dbPath: string, rootPath: string) => {
+  const handleSyncCmmConfig = async (dbPath: string, rootPath?: string): Promise<boolean> => {
     setCmmDbPath(dbPath);
-    setComfyModelsRoot(rootPath);
+    if (rootPath) {
+      setComfyModelsRoot(rootPath);
+    }
     if (window.renegadeSwarm) {
       const res = await window.renegadeSwarm.configureCmmSync({
         cmmDbPath: dbPath,
         comfyModelsRoot: rootPath,
         autoImportDownloaded: true,
       });
-      const connected = res.success && res.data?.dbConnected;
+      const connected = !!(res.success && res.data?.connected);
       setCmmConnected(connected);
       if (connected) {
         fetchCmmModels();

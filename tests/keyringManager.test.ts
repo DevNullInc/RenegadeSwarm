@@ -57,7 +57,7 @@ describe('KeyringManager & User Identity Tests', () => {
   it('should add, list, remove, and persist trusted creator keys in keyring', () => {
     const manager = new KeyringManager(testDir);
     const initialCount = manager.getEntries().length;
-    expect(initialCount).toBeGreaterThanOrEqual(2);
+    expect(initialCount).toBeGreaterThanOrEqual(1);
 
     const customKey = 'a'.repeat(64);
     manager.addEntry({

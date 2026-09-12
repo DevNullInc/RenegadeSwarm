@@ -60,6 +60,21 @@ export class KeyringManager {
       if (fs.existsSync(this.keyringFilePath)) {
         const data = fs.readFileSync(this.keyringFilePath, 'utf-8');
         this.keyringEngine.importKeyring(data);
+
+        // Purge legacy/placeholder root keys if present from previous runs
+        const legacyKeys = [
+          'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          'af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262',
+        ];
+        let purged = false;
+        for (const lk of legacyKeys) {
+          if (this.keyringEngine.removeEntry(lk)) {
+            purged = true;
+          }
+        }
+        if (purged) {
+          this.saveKeyring();
+        }
       } else {
         this.saveKeyring();
       }

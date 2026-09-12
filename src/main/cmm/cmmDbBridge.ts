@@ -45,6 +45,10 @@ export interface CmmStatusResult {
   modelCount: number;
   isProcessRunning: boolean;
   lastChecked: number;
+  comfyuiRoot?: string;
+  comfyuiFolders?: string[];
+  comfyuiInstallDir?: string;
+  folderMappings?: Record<string, string>;
 }
 
 export class CmmDbBridge {
@@ -129,7 +133,7 @@ export class CmmDbBridge {
       }
     }
 
-    // Verify database connectivity and retrieve active model count
+    // Verify database connectivity and retrieve active model count and app config
     try {
       const ok = await this.attachCmmDatabase(dbPath);
       if (!ok) {
@@ -153,12 +157,50 @@ export class CmmDbBridge {
         );
       });
 
+      // Query cmm.app_config for model folders, root path, and install directory
+      let comfyuiRoot = '';
+      let comfyuiFolders: string[] = [];
+      let comfyuiInstallDir = '';
+      let folderMappings: Record<string, string> = {};
+
+      await new Promise<void>((resolve) => {
+        this.localDb?.all(
+          'SELECT key, value FROM cmm.app_config;',
+          (err, rows: any[]) => {
+            if (!err && Array.isArray(rows)) {
+              for (const r of rows) {
+                try {
+                  const val = JSON.parse(r.value);
+                  if (r.key === 'comfyui_root') comfyuiRoot = typeof val === 'string' ? val : '';
+                  if (r.key === 'comfyui_folders') comfyuiFolders = Array.isArray(val) ? val : [];
+                  if (r.key === 'comfyui_install_dir') comfyuiInstallDir = typeof val === 'string' ? val : '';
+                  if (r.key === 'folder_mappings' && typeof val === 'object') folderMappings = val;
+                } catch {
+                  if (r.key === 'comfyui_root') comfyuiRoot = String(r.value || '');
+                  if (r.key === 'comfyui_install_dir') comfyuiInstallDir = String(r.value || '');
+                }
+              }
+            }
+            resolve();
+          }
+        );
+      });
+
+      // If comfyui_root is present but not in comfyui_folders, ensure it's included
+      if (comfyuiRoot && !comfyuiFolders.some(f => f.toLowerCase() === comfyuiRoot.toLowerCase())) {
+        comfyuiFolders.unshift(comfyuiRoot);
+      }
+
       this.lastStatusResult = {
         connected: true,
         dbPath,
         modelCount,
         isProcessRunning,
         lastChecked: now,
+        comfyuiRoot,
+        comfyuiFolders,
+        comfyuiInstallDir,
+        folderMappings,
       };
       return this.lastStatusResult;
     } catch {
@@ -193,10 +235,57 @@ export class CmmDbBridge {
               cmm_synced INTEGER DEFAULT 0,
               created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+          `);
+          this.localDb.run(`
+            CREATE TABLE IF NOT EXISTS app_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
           `, () => resolve());
         } else {
           resolve();
         }
+      });
+    });
+  }
+
+  async getPersistedAppSettings(): Promise<{ customFolders: string[]; defaultFolder: string }> {
+    if (!this.localDb) await this.initLocalDb();
+    return new Promise((resolve) => {
+      this.localDb?.all('SELECT key, value FROM app_settings;', (err, rows: any[]) => {
+        const out = { customFolders: [] as string[], defaultFolder: '' };
+        if (!err && Array.isArray(rows)) {
+          for (const r of rows) {
+            try {
+              if (r.key === 'custom_model_folders') out.customFolders = JSON.parse(r.value);
+              if (r.key === 'default_download_folder') out.defaultFolder = JSON.parse(r.value);
+            } catch {
+              if (r.key === 'default_download_folder') out.defaultFolder = r.value;
+            }
+          }
+        }
+        resolve(out);
+      });
+    });
+  }
+
+  async savePersistedAppSettings(settings: { customFolders?: string[]; defaultFolder?: string }): Promise<void> {
+    if (!this.localDb) await this.initLocalDb();
+    return new Promise((resolve) => {
+      this.localDb?.serialize(() => {
+        if (settings.customFolders !== undefined) {
+          this.localDb?.run(
+            'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?);',
+            ['custom_model_folders', JSON.stringify(settings.customFolders)]
+          );
+        }
+        if (settings.defaultFolder !== undefined) {
+          this.localDb?.run(
+            'INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?);',
+            ['default_download_folder', JSON.stringify(settings.defaultFolder)]
+          );
+        }
+        resolve();
       });
     });
   }

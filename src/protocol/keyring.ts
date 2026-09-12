@@ -32,17 +32,9 @@ export const DEFAULT_TRUSTED_ROOTS: KeyringEntry[] = [
     creatorName: 'TheStygianRenegade',
     publicKeyHex: '70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7',
     trustLevel: 'VerifiedCreator',
-    alias: 'Renegade Core Team',
+    alias: 'TheStygianRenegade / /dev/null Inc',
     addedAt: 1723456789,
     notes: 'Official RenegadeSwarm creator key',
-  },
-  {
-    creatorName: 'DevNullInc',
-    publicKeyHex: 'af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262',
-    trustLevel: 'VerifiedCreator',
-    alias: '/dev/null Inc',
-    addedAt: 1723456789,
-    notes: 'Official DevNullInc publisher key',
   },
 ];
 

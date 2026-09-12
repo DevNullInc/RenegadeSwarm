@@ -87,4 +87,41 @@ describe('CMM Compatible Folder Router', () => {
   it('should sanitize illegal characters in path segments', () => {
     expect(sanitizePathSegment('Model: Flux <Special> | "Test"')).toBe('Model_ Flux _Special_ _ _Test_');
   });
+
+  it('should support synchronizing multiple CMM model folders and custom folders', () => {
+    const multiRouter = new CmmFolderRouter();
+    multiRouter.syncCmmFolders(['D:/AI/ComfyUI/models', 'E:/SecondaryModels'], 'D:/AI/ComfyUI/models');
+
+    let entries = multiRouter.getModelFolderEntries();
+    expect(entries.length).toBe(2);
+    expect(entries[0].source).toBe('cmm');
+    expect(entries[0].isDefault).toBe(true);
+    expect(entries[1].source).toBe('cmm');
+
+    // Add custom folder
+    const added = multiRouter.addCustomFolder('F:/ExtraCustomModels');
+    expect(added).toBe(true);
+    entries = multiRouter.getModelFolderEntries();
+    expect(entries.length).toBe(3);
+    expect(entries.some((e) => e.source === 'custom')).toBe(true);
+
+    // Set default download folder
+    multiRouter.setDefaultDownloadFolder('E:/SecondaryModels');
+    entries = multiRouter.getModelFolderEntries();
+    const sec = entries.find((e) => e.path === path.resolve('E:/SecondaryModels'));
+    expect(sec?.isDefault).toBe(true);
+
+    // Compute destination targeting a specific custom folder
+    const dest = multiRouter.computeDestination({
+      fileName: 'dreamshaper.safetensors',
+      modelType: 'Checkpoint',
+      targetRoot: 'F:/ExtraCustomModels',
+    });
+    expect(dest.fullPath.startsWith(path.resolve('F:/ExtraCustomModels'))).toBe(true);
+
+    // Remove folder
+    const removed = multiRouter.removeModelFolder('F:/ExtraCustomModels');
+    expect(removed).toBe(true);
+    expect(multiRouter.getModelFolderEntries().length).toBe(2);
+  });
 });

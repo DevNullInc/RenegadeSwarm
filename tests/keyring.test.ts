@@ -23,10 +23,11 @@ describe('Decentralized Keyring & Web-of-Trust Engine (Rule 10)', () => {
   it('should initialize with certified default trusted creator roots', () => {
     const keyring = new KeyringEngine();
     const entries = keyring.getEntries();
-    expect(entries.length).toBeGreaterThanOrEqual(2);
+    expect(entries.length).toBeGreaterThanOrEqual(1);
 
     const renegade = entries.find((e) => e.creatorName === 'TheStygianRenegade');
     expect(renegade).toBeDefined();
+    expect(renegade?.publicKeyHex).toBe('70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7');
     expect(renegade?.trustLevel).toBe('VerifiedCreator');
   });
 

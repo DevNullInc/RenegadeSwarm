@@ -18,8 +18,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import crypto from 'crypto';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
+import { sharingPolicyManager } from '../engine/sharingPolicyManager';
 
 export interface ExtractedModelMetadata {
   modelFilePath: string;
@@ -34,13 +36,104 @@ export interface ExtractedModelMetadata {
   description: string;
   tags: string[];
   civitaiModelId?: number;
+  civitaiVersionId?: number;
   hfRepoId?: string;
   sha256?: string;
+  isLlm?: boolean;
 }
 
 export class ModelMetadataExtractor {
   /**
+   * Identifies whether a given model file or specification is an LLM (Large Language Model)
+   * rather than an image/diffusion generation model.
+   */
+  isLlmModel(filePath: string, modelType?: string, fileName?: string): boolean {
+    const resolvedFileName = fileName || path.basename(filePath);
+    const lowerName = resolvedFileName.toLowerCase();
+    const lowerPath = filePath.toLowerCase().replace(/\\/g, '/');
+    const ext = path.extname(resolvedFileName).toLowerCase();
+    const lowerType = (modelType || '').toLowerCase();
+
+    if (
+      lowerType.includes('llm') ||
+      lowerType.includes('text-generation') ||
+      lowerType.includes('chat') ||
+      lowerType.includes('instruct') ||
+      lowerType.includes('language')
+    ) {
+      return true;
+    }
+
+    // LLM keyword indicators in filename or path
+    const llmKeywords = [
+      'llama',
+      'alpaca',
+      'vicuna',
+      'mistral',
+      'mixtral',
+      'qwen',
+      'gemma',
+      'deepseek',
+      'phi-2',
+      'phi-3',
+      'phi-4',
+      'phi2',
+      'phi3',
+      'phi4',
+      'wizardlm',
+      'starcoder',
+      'codellama',
+      'granite',
+      'command-r',
+      'openchat',
+      'zephyr',
+      'smollm',
+      'nemotron',
+      'hermes',
+      'falcon',
+      'solar',
+      'internlm',
+      'yi-34b',
+      'yi-9b',
+      'yi-6b',
+      'exl2',
+      'gptq',
+      'awq',
+      'text-generation',
+      'llm',
+    ];
+
+    for (const kw of llmKeywords) {
+      if (lowerName.includes(kw) || lowerPath.includes(`/${kw}`) || lowerPath.includes(`\\${kw}`)) {
+        return true;
+      }
+    }
+
+    // GGUF files are predominantly LLMs unless explicitly marked with diffusion architecture tokens
+    if (ext === '.gguf') {
+      const isImageDiffusion =
+        lowerName.includes('flux') ||
+        lowerName.includes('sdxl') ||
+        lowerName.includes('sd15') ||
+        lowerName.includes('sd1.5') ||
+        lowerName.includes('sd3') ||
+        lowerName.includes('pony') ||
+        lowerName.includes('diffusion') ||
+        lowerName.includes('unet') ||
+        lowerName.includes('vae') ||
+        lowerName.includes('lora');
+
+      if (!isImageDiffusion) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Extracts metadata from local file headers, RenegadeCMM DB, and online registries (CivitAI/HuggingFace).
+   * Automatically checks SHA256 against CivitAI for non-LLM models and pulls creator, tags, and SFW preview images.
    */
   async extractMetadata(filePath: string): Promise<ExtractedModelMetadata> {
     const resolvedPath = path.resolve(filePath);
@@ -61,7 +154,9 @@ export class ModelMetadataExtractor {
     let description = '';
     let tags: string[] = [];
     let civitaiModelId: number | undefined;
+    let civitaiVersionId: number | undefined;
     let hfRepoId: string | undefined;
+    let sha256: string | undefined;
     let previewFilePath = this.findSiblingPreviewImage(dir, fileName);
 
     // 1. Try extracting embedded metadata from .safetensors header
@@ -92,45 +187,72 @@ export class ModelMetadataExtractor {
       if (matched) {
         if (!title && matched.civitai_name) title = matched.civitai_name;
         if (matched.civitai_model_id) civitaiModelId = matched.civitai_model_id;
+        if (matched.civitai_version_id) civitaiVersionId = matched.civitai_version_id;
         if (matched.hf_repo_id) hfRepoId = matched.hf_repo_id;
         if (matched.model_type) modelType = this.normalizeModelType(matched.model_type);
+        if (matched.sha256) sha256 = matched.sha256.toLowerCase();
       }
     } catch {
       // CMM DB not available
     }
 
-    // 3. Fallback: Format clean title from filename if title still empty
-    if (!title) {
-      title = this.formatTitleFromFileName(fileName);
+    // 3. Check whether the target model is an LLM
+    const isLlm = this.isLlmModel(resolvedPath, modelType, fileName);
+    if (isLlm && (modelType === 'Checkpoint' || !modelType)) {
+      modelType = 'LLM';
     }
 
-    // 4. Compute SHA256 (or fast hash) and query CivitAI if online and missing creator/details
-    let sha256: string | undefined;
-    try {
-      // Compute full sha256 if file is <= 2GB, or fast first 16MB digest
-      if (stat.size <= 2 * 1024 * 1024 * 1024) {
-        sha256 = await this.computeFileSha256(resolvedPath);
-      }
-    } catch {
-      // Ignore hash computation errors
-    }
-
-    if ((!creator || !civitaiModelId) && sha256) {
+    // 4. Compute SHA256 if not already cached from CMM database (up to 4GB files)
+    if (!sha256) {
       try {
-        const civitaiInfo = await this.fetchCivitaiMetadataByHash(sha256);
+        if (stat.size <= 4 * 1024 * 1024 * 1024) {
+          sha256 = await this.computeFileSha256(resolvedPath);
+        }
+      } catch {
+        // Ignore hash computation errors
+      }
+    }
+
+    // 5. If NOT an LLM and SHA256 hash is available, check CivitAI registry
+    if (!isLlm && sha256) {
+      try {
+        const allowNsfw = sharingPolicyManager.getPolicy().allowNsfwSharing;
+        const civitaiInfo = await this.fetchCivitaiMetadataByHash(sha256, allowNsfw);
+
         if (civitaiInfo) {
           if (civitaiInfo.modelName) {
-            title = civitaiInfo.versionName ? `${civitaiInfo.modelName} (${civitaiInfo.versionName})` : civitaiInfo.modelName;
+            title =
+              civitaiInfo.versionName && !civitaiInfo.modelName.includes(civitaiInfo.versionName)
+                ? `${civitaiInfo.modelName} (${civitaiInfo.versionName})`
+                : civitaiInfo.modelName;
           }
-          if (civitaiInfo.creator) creator = civitaiInfo.creator;
+          if (civitaiInfo.creator && !creator) creator = civitaiInfo.creator;
           if (civitaiInfo.baseModel && !baseModel) baseModel = civitaiInfo.baseModel;
           if (civitaiInfo.modelType) modelType = this.normalizeModelType(civitaiInfo.modelType);
           if (civitaiInfo.modelId) civitaiModelId = civitaiInfo.modelId;
+          if (civitaiInfo.versionId) civitaiVersionId = civitaiInfo.versionId;
           if (civitaiInfo.description && !description) description = civitaiInfo.description;
+
+          if (civitaiInfo.tags && civitaiInfo.tags.length > 0) {
+            tags = Array.from(new Set([...tags, ...civitaiInfo.tags]));
+          }
+
+          // Auto-pull preview image only if SFW (or allowed) and no local sibling preview exists
+          if (civitaiInfo.previewImageUrl && !previewFilePath) {
+            const cachedPreview = await this.downloadAndCachePreview(civitaiInfo.previewImageUrl, sha256);
+            if (cachedPreview) {
+              previewFilePath = cachedPreview;
+            }
+          }
         }
       } catch {
-        // Network query timed out or unavailable
+        // Online lookup failed or network offline
       }
+    }
+
+    // 6. Fallback: Format clean title from filename if title still empty
+    if (!title) {
+      title = this.formatTitleFromFileName(fileName);
     }
 
     return {
@@ -140,14 +262,16 @@ export class ModelMetadataExtractor {
       previewFilePath,
       title: title || this.formatTitleFromFileName(fileName),
       version: version || '1.0.0',
-      modelType: modelType || 'Checkpoint',
+      modelType: modelType || (isLlm ? 'LLM' : 'Checkpoint'),
       baseModel: baseModel || this.guessBaseModel(fileName),
       creator: creator || '',
       description: description || '',
       tags,
       civitaiModelId,
+      civitaiVersionId,
       hfRepoId,
       sha256,
+      isLlm,
     };
   }
 
@@ -179,7 +303,14 @@ export class ModelMetadataExtractor {
           architecture: meta['modelspec.architecture'] || meta['modelspec.prediction_type'] || meta.ss_base_model_version,
           baseModel: meta.baseModel || meta.ss_base_model_version,
           description: meta['modelspec.description'] || meta.description,
-          tags: meta['modelspec.tags'] ? (typeof meta['modelspec.tags'] === 'string' ? meta['modelspec.tags'].split(',').map((t: string) => t.trim()).filter(Boolean) : meta['modelspec.tags']) : undefined,
+          tags: meta['modelspec.tags']
+            ? typeof meta['modelspec.tags'] === 'string'
+              ? meta['modelspec.tags']
+                  .split(',')
+                  .map((t: string) => t.trim())
+                  .filter(Boolean)
+              : meta['modelspec.tags']
+            : undefined,
           modelType: meta['modelspec.type'] || (meta.ss_network_module ? 'LORA' : undefined),
         };
       }
@@ -248,6 +379,7 @@ export class ModelMetadataExtractor {
     if (t.includes('controlnet')) return 'Controlnet';
     if (t.includes('upscaler') || t.includes('upscale')) return 'Upscaler';
     if (t.includes('text') || t.includes('clip')) return 'TextEncoder';
+    if (t.includes('llm') || t.includes('chat') || t.includes('instruct')) return 'LLM';
     return 'Checkpoint';
   }
 
@@ -264,7 +396,7 @@ export class ModelMetadataExtractor {
   /**
    * Computes streaming SHA256 of the model file.
    */
-  private async computeFileSha256(filePath: string): Promise<string> {
+  async computeFileSha256(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const hash = crypto.createHash('sha256');
       const stream = fs.createReadStream(filePath);
@@ -276,18 +408,25 @@ export class ModelMetadataExtractor {
 
   /**
    * Queries CivitAI public API for model version metadata by SHA256 hash.
+   * Filters preview images to strictly SFW unless allowNsfw is enabled.
    */
-  private async fetchCivitaiMetadataByHash(hash: string): Promise<{
+  async fetchCivitaiMetadataByHash(
+    hash: string,
+    allowNsfw: boolean = false
+  ): Promise<{
     modelId?: number;
+    versionId?: number;
     modelName?: string;
     versionName?: string;
     creator?: string;
     modelType?: string;
     baseModel?: string;
     description?: string;
+    tags?: string[];
+    previewImageUrl?: string;
   } | null> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     try {
       const response = await fetch(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`, {
@@ -298,19 +437,97 @@ export class ModelMetadataExtractor {
       if (!response.ok) return null;
 
       const data: any = await response.json();
+
+      // Extract tags
+      const rawTags = data.model?.tags || data.tags;
+      const extractedTags: string[] = [];
+      if (Array.isArray(rawTags)) {
+        for (const t of rawTags) {
+          if (typeof t === 'string' && t.trim()) {
+            extractedTags.push(t.trim());
+          } else if (t && typeof t.name === 'string' && t.name.trim()) {
+            extractedTags.push(t.name.trim());
+          } else if (t && t.tag && typeof t.tag.name === 'string' && t.tag.name.trim()) {
+            extractedTags.push(t.tag.name.trim());
+          }
+        }
+      }
+
+      // Extract Preview Image URL with strict SFW policy
+      let previewImageUrl: string | undefined;
+      if (Array.isArray(data.images) && data.images.length > 0) {
+        if (allowNsfw) {
+          previewImageUrl = data.images[0]?.url;
+        } else {
+          // Look for strictly SFW images (nsfw === false and nsfwLevel is 1 or None)
+          const sfwImage = data.images.find((img: any) => {
+            if (!img || img.nsfw === true) return false;
+            if (typeof img.nsfwLevel === 'number') return img.nsfwLevel <= 1;
+            if (typeof img.nsfwLevel === 'string') {
+              const lvl = img.nsfwLevel.toLowerCase();
+              return lvl === 'none' || lvl === 'pg' || lvl === 'sfw';
+            }
+            return img.nsfw === false || img.nsfw === undefined;
+          });
+
+          if (sfwImage) {
+            previewImageUrl = sfwImage.url;
+          }
+        }
+      }
+
       return {
         modelId: data.modelId,
+        versionId: data.id,
         modelName: data.model?.name,
         versionName: data.name,
         creator: data.model?.creator?.username,
         modelType: data.model?.type,
         baseModel: data.baseModel,
-        description: data.description ? data.description.replace(/<[^>]*>?/gm, '') : undefined,
+        description: data.description ? data.description.replace(/<[^>]*>?/gm, '').trim() : undefined,
+        tags: extractedTags,
+        previewImageUrl,
       };
     } catch {
       return null;
     } finally {
       clearTimeout(timeoutId);
+    }
+  }
+
+  /**
+   * Downloads and caches remote preview image to local storage.
+   */
+  async downloadAndCachePreview(imageUrl: string, hash: string): Promise<string | undefined> {
+    try {
+      const previewDir = path.join(os.homedir(), '.renegadeswarm', 'previews');
+      if (!fs.existsSync(previewDir)) {
+        fs.mkdirSync(previewDir, { recursive: true });
+      }
+
+      const localPath = path.join(previewDir, `${hash.slice(0, 16)}.jpg`);
+      if (fs.existsSync(localPath) && fs.statSync(localPath).size > 200) {
+        return localPath;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(imageUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'RenegadeSwarm/0.1.0' },
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) return undefined;
+      const arrayBuffer = await res.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      if (buffer.length < 200) return undefined;
+
+      await fs.promises.writeFile(localPath, buffer);
+      return localPath;
+    } catch {
+      return undefined;
     }
   }
 }

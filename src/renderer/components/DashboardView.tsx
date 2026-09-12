@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Download,
   Upload,
@@ -27,13 +27,15 @@ import {
   Zap,
   Users,
   HardDrive,
-  CheckCircle2
+  CheckCircle2,
+  Folder,
 } from 'lucide-react';
 import { SwarmTorrentStatus } from '../../protocol/types';
+import { ModelFolderEntry } from '../../shared/ipcContracts';
 
 interface DashboardViewProps {
   torrents: SwarmTorrentStatus[];
-  onAddMagnet: (magnetUri: string) => Promise<void>;
+  onAddMagnet: (magnetUri: string, customDestination?: string) => Promise<void>;
   onPause: (infoHash: string) => void;
   onResume: (infoHash: string) => void;
   onRemove: (infoHash: string) => void;
@@ -49,6 +51,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
   const [magnetInput, setMagnetInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'downloading' | 'seeding'>('all');
+  const [availableFolders, setAvailableFolders] = useState<ModelFolderEntry[]>([]);
+  const [selectedDestination, setSelectedDestination] = useState<string>('');
+
+  const loadFolders = async () => {
+    if (window.renegadeSwarm?.getModelFolders) {
+      try {
+        const res = await window.renegadeSwarm.getModelFolders();
+        if (res.success && res.data) {
+          const list: ModelFolderEntry[] = res.data.folders || [];
+          setAvailableFolders(list);
+          const defaultF = res.data.defaultFolder || (list[0]?.path || '');
+          setSelectedDestination(defaultF);
+        }
+      } catch (err) {
+        console.error('Failed to load model folders:', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadFolders();
+  }, [showAddModal]);
+
+  const handleBrowseCustomDestination = async () => {
+    if (!window.renegadeSwarm?.browseDirectory) return;
+    try {
+      const res = await window.renegadeSwarm.browseDirectory({ title: 'Select Download Destination Folder' });
+      if (res.success && res.data?.folderPath) {
+        const selected = res.data.folderPath;
+        setSelectedDestination(selected);
+        // Also add to available folders temporarily if not present
+        if (!availableFolders.some(f => f.path.toLowerCase() === selected.toLowerCase())) {
+          setAvailableFolders(prev => [...prev, {
+            path: selected,
+            source: 'custom',
+            isDefault: false,
+            label: 'Selected Folder',
+          }]);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const filtered = torrents.filter((t) => {
     if (filter === 'downloading') return t.state === 'downloading';
@@ -71,7 +117,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!magnetInput.trim()) return;
-    await onAddMagnet(magnetInput.trim());
+    await onAddMagnet(magnetInput.trim(), selectedDestination || undefined);
     setMagnetInput('');
     setShowAddModal(false);
   };
@@ -296,14 +342,103 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
 
             <form onSubmit={handleAdd}>
-              <textarea
-                value={magnetInput}
-                onChange={(e) => setMagnetInput(e.target.value)}
-                placeholder="magnet:?xt=urn:btih:...&dn=FLUX.1-Dev.safetensors"
-                style={{ width: '100%', height: '100px', resize: 'none', marginBottom: '16px' }}
-                className="mono"
-                required
-              />
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
+                  BitTorrent / RenegadeSwarm Magnet Link *
+                </label>
+                <textarea
+                  value={magnetInput}
+                  onChange={(e) => setMagnetInput(e.target.value)}
+                  placeholder="magnet:?xt=urn:btih:...&dn=FLUX.1-Dev.safetensors"
+                  style={{ width: '100%', height: '80px', resize: 'none', boxSizing: 'border-box' }}
+                  className="mono"
+                  required
+                />
+              </div>
+
+              {/* Download Destination Model Folder Selector */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Download Destination Model Directory:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleBrowseCustomDestination}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--accent-purple)',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: 0,
+                    }}
+                  >
+                    <Folder size={12} /> Browse Folder...
+                  </button>
+                </div>
+
+                {availableFolders.length > 0 ? (
+                  <select
+                    value={selectedDestination}
+                    onChange={(e) => setSelectedDestination(e.target.value)}
+                    style={{
+                      width: '100%',
+                      background: '#0d1117',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      padding: '10px 12px',
+                      fontSize: '12px',
+                      color: 'var(--text-main)',
+                      outline: 'none',
+                    }}
+                  >
+                    {availableFolders.map((f) => (
+                      <option key={f.path} value={f.path}>
+                        {f.path} {f.isDefault ? '(Default)' : ''} [{f.source === 'cmm' ? 'CMM' : 'Custom'}]
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      readOnly
+                      value={selectedDestination || 'Default models directory'}
+                      style={{
+                        flex: 1,
+                        background: '#0d1117',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: '8px',
+                        padding: '8px 12px',
+                        fontSize: '12px',
+                        color: 'var(--text-muted)',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleBrowseCustomDestination}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--text-main)',
+                        border: '1px solid var(--border-subtle)',
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Browse...
+                    </button>
+                  </div>
+                )}
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+                  Model files will be auto-categorized into subfolders (`checkpoints/`, `loras/`, `vae/`, etc.) inside this directory.
+                </span>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                 <button

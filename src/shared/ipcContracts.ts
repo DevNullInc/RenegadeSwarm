@@ -57,9 +57,18 @@ export const BandwidthSettingsSchema = z.object({
   enableDht: z.boolean().default(true),
 });
 
+export interface ModelFolderEntry {
+  path: string;
+  source: 'cmm' | 'custom';
+  isDefault: boolean;
+  label?: string;
+}
+
 export const CmmSyncConfigRequestSchema = z.object({
   cmmDbPath: z.string().min(1),
-  comfyModelsRoot: z.string().min(1),
+  comfyModelsRoot: z.string().optional(),
+  modelFolders: z.array(z.string()).optional(),
+  defaultDownloadFolder: z.string().optional(),
   autoImportDownloaded: z.boolean().default(true),
 });
 

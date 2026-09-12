@@ -26,7 +26,6 @@ import {
   Copy,
   Check,
   Plus,
-  Trash2,
   Download,
   Upload,
   RefreshCw,
@@ -37,22 +36,27 @@ import {
   AlertTriangle,
   Info,
   Lock,
+  X,
+  Folder,
+  FolderPlus,
+  Trash2,
+  HardDrive,
+  CheckCircle2,
 } from 'lucide-react';
 import { KeyringEntry, TrustLevel } from '../../protocol/keyring';
-import { UserIdentity, LockoutStatus } from '../../shared/ipcContracts';
+import { UserIdentity, LockoutStatus, ModelFolderEntry } from '../../shared/ipcContracts';
 import { SharingPolicySettings } from '../../protocol/sharingPolicy';
 
 interface SettingsViewProps {
   cmmDbPath: string;
-  comfyModelsRoot: string;
+  comfyModelsRoot?: string;
   sharingPolicy: SharingPolicySettings;
-  onSyncCmmConfig: (dbPath: string, rootPath: string) => Promise<boolean>;
+  onSyncCmmConfig: (dbPath: string, rootPath?: string) => Promise<boolean>;
   onUpdateSharingPolicy: (policy: Partial<SharingPolicySettings>) => Promise<void>;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   cmmDbPath: initialDbPath,
-  comfyModelsRoot: initialRootPath,
   sharingPolicy,
   onSyncCmmConfig,
   onUpdateSharingPolicy,
@@ -81,9 +85,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showImportModal, setShowImportModal] = useState(false);
   const [importJsonText, setImportJsonText] = useState('');
 
-  // Path Configuration State
+  const [pendingDeleteEntry, setPendingDeleteEntry] = useState<KeyringEntry | null>(null);
+
+  // Path & Model Folders Configuration State
   const [dbPathInput, setDbPathInput] = useState(initialDbPath);
-  const [rootPathInput, setRootPathInput] = useState(initialRootPath);
+  const [modelFolders, setModelFolders] = useState<ModelFolderEntry[]>([]);
+  const [pendingDeleteFolder, setPendingDeleteFolder] = useState<ModelFolderEntry | null>(null);
+  const [cmmStatusInfo, setCmmStatusInfo] = useState<{ connected: boolean; modelCount: number } | null>(null);
+
+  const fetchModelFolders = async () => {
+    if (!window.renegadeSwarm) return;
+    try {
+      if (window.renegadeSwarm.getModelFolders) {
+        const res = await window.renegadeSwarm.getModelFolders();
+        if (res.success && res.data) {
+          setModelFolders(res.data.folders || []);
+        }
+      }
+      if (window.renegadeSwarm.getCmmStatus) {
+        const statusRes = await window.renegadeSwarm.getCmmStatus();
+        if (statusRes.success && statusRes.data) {
+          setCmmStatusInfo({
+            connected: statusRes.data.connected,
+            modelCount: statusRes.data.modelCount || 0,
+          });
+          if (statusRes.data.dbPath) {
+            setDbPathInput(statusRes.data.dbPath);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch model folders or CMM status:', err);
+    }
+  };
 
   const fetchSecurityState = async () => {
     if (!window.renegadeSwarm) return;
@@ -116,6 +150,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   useEffect(() => {
     fetchSecurityState();
+    fetchModelFolders();
     const interval = setInterval(async () => {
       if (window.renegadeSwarm?.getKeyringLockoutStatus) {
         const res = await window.renegadeSwarm.getKeyringLockoutStatus();
@@ -215,17 +250,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleRemoveKey = async (publicKeyHex: string, creatorName: string) => {
-    if (!window.renegadeSwarm) return;
-    if (!confirm(`Remove @${creatorName} (${publicKeyHex.substring(0, 16)}...) from your Keyring?`)) return;
-
+  const handleConfirmRemoveKey = async () => {
+    if (!window.renegadeSwarm || !pendingDeleteEntry) return;
+    const entry = pendingDeleteEntry;
     try {
-      const res = await window.renegadeSwarm.removeKeyringEntry(publicKeyHex);
+      const res = await window.renegadeSwarm.removeKeyringEntry(entry.publicKeyHex);
       if (res.success && res.data) {
         setKeyringEntries(res.data);
+        setStatusMsg({ text: `Removed @${entry.creatorName} from Web of Trust Keyring`, type: 'info' });
+        setTimeout(() => setStatusMsg(null), 3500);
+      } else {
+        alert(res.error || 'Failed to remove creator key');
       }
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setPendingDeleteEntry(null);
     }
   };
 
@@ -261,18 +301,77 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleSavePaths = async () => {
+  const handleBrowseDbPath = async () => {
+    if (!window.renegadeSwarm?.browseSqliteFile) return;
     setLoading(true);
     try {
-      const ok = await onSyncCmmConfig(dbPathInput, rootPathInput);
-      if (ok) {
-        setStatusMsg({ text: 'Paths saved and RenegadeCMM connection verified!', type: 'success' });
-      } else {
-        setStatusMsg({ text: 'Paths saved. CMM database not yet reachable at specified path.', type: 'info' });
+      const res = await window.renegadeSwarm.browseSqliteFile();
+      if (res.success && res.data?.filePath) {
+        setDbPathInput(res.data.filePath);
+        const ok = await onSyncCmmConfig(res.data.filePath);
+        await fetchModelFolders();
+        if (ok) {
+          setStatusMsg({ text: 'Connected to RenegadeCMM database and synchronized model folders!', type: 'success' });
+        } else {
+          setStatusMsg({ text: `Set CMM database path: ${res.data.filePath}`, type: 'info' });
+        }
+        setTimeout(() => setStatusMsg(null), 3500);
       }
-      setTimeout(() => setStatusMsg(null), 4000);
+    } catch (err: any) {
+      setStatusMsg({ text: err.message, type: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBrowseAddFolder = async () => {
+    if (!window.renegadeSwarm?.browseDirectory || !window.renegadeSwarm?.addModelFolder) return;
+    try {
+      const pickRes = await window.renegadeSwarm.browseDirectory({ title: 'Select Model Directory to Add' });
+      if (pickRes.success && pickRes.data?.folderPath) {
+        const addRes = await window.renegadeSwarm.addModelFolder(pickRes.data.folderPath);
+        if (addRes.success && addRes.data) {
+          setModelFolders(addRes.data.folders || []);
+          setStatusMsg({ text: `Added model directory: ${pickRes.data.folderPath}`, type: 'success' });
+          setTimeout(() => setStatusMsg(null), 3500);
+        } else {
+          alert(addRes.error || 'Failed to add model folder');
+        }
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleConfirmRemoveFolder = async () => {
+    if (!window.renegadeSwarm?.removeModelFolder || !pendingDeleteFolder) return;
+    try {
+      const res = await window.renegadeSwarm.removeModelFolder(pendingDeleteFolder.path);
+      if (res.success && res.data) {
+        setModelFolders(res.data.folders || []);
+        setStatusMsg({ text: `Removed model directory: ${pendingDeleteFolder.path}`, type: 'info' });
+        setTimeout(() => setStatusMsg(null), 3500);
+      } else {
+        alert(res.error || 'Failed to remove folder');
+      }
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setPendingDeleteFolder(null);
+    }
+  };
+
+  const handleSetDefaultFolder = async (folderPath: string) => {
+    if (!window.renegadeSwarm?.setDefaultDownloadFolder) return;
+    try {
+      const res = await window.renegadeSwarm.setDefaultDownloadFolder(folderPath);
+      if (res.success && res.data) {
+        setModelFolders(res.data.folders || []);
+        setStatusMsg({ text: `Set default download location to: ${folderPath}`, type: 'success' });
+        setTimeout(() => setStatusMsg(null), 3000);
+      }
+    } catch (err: any) {
+      alert(err.message);
     }
   };
 
@@ -605,86 +704,73 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    keyringEntries.map((entry) => {
-                      const isRoot = entry.creatorName === 'TheStygianRenegade' || entry.creatorName === 'DevNullInc';
-                      return (
-                        <tr
-                          key={entry.publicKeyHex}
-                          style={{
-                            borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
-                            transition: 'background 0.15s ease',
-                          }}
-                        >
-                          <td style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontWeight: 700, color: '#fff' }}>@{entry.creatorName}</span>
-                              {isRoot && (
-                                <span style={{
-                                  fontSize: '9px',
-                                  textTransform: 'uppercase',
-                                  padding: '1px 5px',
-                                  borderRadius: '4px',
-                                  background: 'rgba(168, 85, 247, 0.2)',
-                                  color: '#c084fc',
-                                  fontWeight: 700,
-                                }}>
-                                  Root
-                                </span>
-                              )}
-                            </div>
-                            {entry.alias && (
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{entry.alias}</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            {getTrustBadge(entry.trustLevel)}
-                          </td>
-                          <td style={{ padding: '12px 16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <code className="mono" style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(0, 0, 0, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
-                                {entry.publicKeyHex}
-                              </code>
-                              <button
-                                onClick={() => handleCopy(entry.publicKeyHex, entry.publicKeyHex)}
-                                title="Copy 64-character public key"
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: copiedField === entry.publicKeyHex ? '#10b981' : 'var(--text-muted)',
-                                  cursor: 'pointer',
-                                  padding: '4px',
-                                }}
-                              >
-                                {copiedField === entry.publicKeyHex ? <Check size={14} /> : <Copy size={14} />}
-                              </button>
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                            {entry.notes || '—'}
-                          </td>
-                          <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                            {!isRoot ? (
-                              <button
-                                onClick={() => handleRemoveKey(entry.publicKeyHex, entry.creatorName)}
-                                title="Remove key from keyring"
-                                style={{
-                                  background: 'rgba(239, 68, 68, 0.1)',
-                                  color: '#ef4444',
-                                  border: '1px solid rgba(239, 68, 68, 0.2)',
-                                  padding: '4px 8px',
-                                  borderRadius: '6px',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            ) : (
-                              <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontStyle: 'italic' }}>Protected</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
+                    keyringEntries.map((entry) => (
+                      <tr
+                        key={entry.publicKeyHex}
+                        style={{
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                          transition: 'background 0.15s ease',
+                        }}
+                      >
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontWeight: 700, color: '#fff' }}>@{entry.creatorName}</span>
+                          </div>
+                          {entry.alias && (
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{entry.alias}</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {getTrustBadge(entry.trustLevel)}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <code className="mono" style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(0, 0, 0, 0.3)', padding: '3px 8px', borderRadius: '4px' }}>
+                              {entry.publicKeyHex}
+                            </code>
+                            <button
+                              onClick={() => handleCopy(entry.publicKeyHex, entry.publicKeyHex)}
+                              title="Copy 64-character public key"
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: copiedField === entry.publicKeyHex ? '#10b981' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                padding: '4px',
+                              }}
+                            >
+                              {copiedField === entry.publicKeyHex ? <Check size={14} /> : <Copy size={14} />}
+                            </button>
+                          </div>
+                        </td>
+                        <td style={{ padding: '12px 16px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                          {entry.notes || '—'}
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <button
+                            onClick={() => setPendingDeleteEntry(entry)}
+                            title={`Remove @${entry.creatorName} from Keyring`}
+                            style={{
+                              background: 'rgba(239, 68, 68, 0.12)',
+                              color: '#ef4444',
+                              border: '1px solid rgba(239, 68, 68, 0.3)',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <X size={13} />
+                            <span>Remove</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -985,7 +1071,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* SECTION 3: PATHS & RENEGADE CMM */}
         {activeSection === 'paths' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+            {/* RenegadeCMM Database Section */}
             <div style={{
               background: 'rgba(22, 27, 34, 0.8)',
               border: '1px solid var(--border-subtle)',
@@ -993,83 +1080,272 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               padding: '24px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
+              gap: '16px',
             }}>
-              <div>
-                <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 700 }}>ComfyUI & RenegadeCMM Integration Paths</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Configure local database and model directories for automatic folder routing and zero-lag metadata sync.
-                </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 700 }}>RenegadeCMM Database Connection</h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Link your local RenegadeCMM SQLite database to auto-discover model roots, track catalogs, and synchronize torrent metadata.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {cmmStatusInfo?.connected ? (
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(16, 185, 129, 0.15)',
+                      border: '1px solid rgba(16, 185, 129, 0.3)',
+                      color: '#10b981',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}>
+                      <CheckCircle2 size={13} /> Connected ({cmmStatusInfo.modelCount} models indexed)
+                    </span>
+                  ) : (
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(239, 68, 68, 0.15)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      color: '#ef4444',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}>
+                      <AlertTriangle size={13} /> Disconnected
+                    </span>
+                  )}
+                  <button
+                    onClick={fetchModelFolders}
+                    disabled={loading}
+                    title="Refresh CMM status and model folders"
+                    style={{
+                      padding: '6px 10px',
+                      borderRadius: '6px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      color: 'var(--text-muted)',
+                      border: '1px solid var(--border-subtle)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <RefreshCw size={13} className={loading ? 'spin' : ''} />
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
                   RenegadeCMM SQLite Database Path (`renegadecmm.sqlite`):
                 </label>
-                <input
-                  type="text"
-                  value={dbPathInput}
-                  onChange={(e) => setDbPathInput(e.target.value)}
-                  style={{
-                    width: '100%',
-                    background: '#0d1117',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    fontSize: '13px',
-                    color: 'var(--text-main)',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                  ComfyUI Models Root Directory (`models/`):
-                </label>
-                <input
-                  type="text"
-                  value={rootPathInput}
-                  onChange={(e) => setRootPathInput(e.target.value)}
-                  style={{
-                    width: '100%',
-                    background: '#0d1117',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: '8px',
-                    padding: '10px 14px',
-                    fontSize: '13px',
-                    color: 'var(--text-main)',
-                    boxSizing: 'border-box',
-                    outline: 'none',
-                  }}
-                />
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input
+                    readOnly
+                    type="text"
+                    value={dbPathInput || 'No CMM database selected'}
+                    className="mono"
+                    style={{
+                      flex: 1,
+                      background: '#0d1117',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      padding: '10px 14px',
+                      fontSize: '12px',
+                      color: dbPathInput ? '#38bdf8' : 'var(--text-muted)',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleBrowseDbPath}
+                    disabled={loading}
+                    style={{
+                      padding: '10px 18px',
+                      borderRadius: '8px',
+                      background: 'var(--accent-purple)',
+                      color: '#fff',
+                      border: 'none',
+                      fontWeight: 600,
+                      fontSize: '12px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Folder size={14} /> Browse Database...
+                  </button>
+                </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-                  Downloaded models are automatically promoted into subfolders (`checkpoints/`, `loras/`, `vae/`, `unet/`, `clip/`) based on detected type.
+                  Direct file selection only to safeguard against arbitrary path injection.
                 </span>
               </div>
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px' }}>
+            {/* Model Directories & ComfyUI Routing Section */}
+            <div style={{
+              background: 'rgba(22, 27, 34, 0.8)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '12px',
+              padding: '24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '16px',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 4px 0', fontSize: '16px', fontWeight: 700 }}>Model Directories & ComfyUI Paths</h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Multiple model directories can be configured. Swarm downloads will let you select a target location or default to your primary folder.
+                  </p>
+                </div>
+
                 <button
-                  onClick={handleSavePaths}
-                  disabled={loading}
+                  type="button"
+                  onClick={handleBrowseAddFolder}
                   style={{
-                    padding: '10px 24px',
+                    padding: '8px 16px',
                     borderRadius: '8px',
                     background: 'var(--accent-purple)',
                     color: '#fff',
                     border: 'none',
                     fontWeight: 600,
-                    fontSize: '13px',
+                    fontSize: '12px',
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
+                    gap: '6px',
                   }}
                 >
-                  <FolderCog size={16} /> Save & Test Path Bindings
+                  <FolderPlus size={14} /> Add Model Folder
                 </button>
               </div>
+
+              {/* Folders List Table */}
+              <div style={{
+                background: 'rgba(13, 17, 23, 0.95)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                overflow: 'hidden',
+              }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', background: 'rgba(0, 0, 0, 0.2)' }}>
+                      <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Model Directory Path</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Source</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)' }}>Default Target</th>
+                      <th style={{ padding: '10px 14px', fontWeight: 600, color: 'var(--text-secondary)', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {modelFolders.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          No model folders configured. Connect to RenegadeCMM or click "+ Add Model Folder".
+                        </td>
+                      </tr>
+                    ) : (
+                      modelFolders.map((entry) => (
+                        <tr
+                          key={entry.path}
+                          style={{
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.03)',
+                            background: entry.isDefault ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                          }}
+                        >
+                          <td style={{ padding: '12px 14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <HardDrive size={15} color={entry.isDefault ? '#10b981' : '#a855f7'} />
+                              <code className="mono" style={{ fontSize: '12px', color: '#fff' }}>
+                                {entry.path}
+                              </code>
+                            </div>
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              background: entry.source === 'cmm' ? 'rgba(168, 85, 247, 0.15)' : 'rgba(6, 182, 212, 0.15)',
+                              color: entry.source === 'cmm' ? '#c084fc' : '#22d3ee',
+                              border: `1px solid ${entry.source === 'cmm' ? 'rgba(168, 85, 247, 0.3)' : 'rgba(6, 182, 212, 0.3)'}`,
+                              fontSize: '11px',
+                              fontWeight: 600,
+                            }}>
+                              {entry.label || (entry.source === 'cmm' ? 'CMM Synced' : 'Custom Added')}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 14px' }}>
+                            {entry.isDefault ? (
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                              }}>
+                                <Check size={12} /> Default Destination
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleSetDefaultFolder(entry.path)}
+                                style={{
+                                  background: 'rgba(255, 255, 255, 0.05)',
+                                  color: 'var(--text-muted)',
+                                  border: '1px solid var(--border-subtle)',
+                                  padding: '4px 8px',
+                                  borderRadius: '6px',
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Set as Default
+                              </button>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              onClick={() => setPendingDeleteFolder(entry)}
+                              title={`Remove ${entry.path} from model directories`}
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                color: '#ef4444',
+                                border: '1px solid rgba(239, 68, 68, 0.3)',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                              }}
+                            >
+                              <X size={12} /> Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                Downloaded models are automatically promoted into ComfyUI subfolders (`checkpoints/`, `loras/`, `vae/`, `unet/`, `clip/`) based on detected model architecture.
+              </span>
             </div>
           </div>
         )}
@@ -1471,6 +1747,251 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 }}
               >
                 Import Key Bundle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL / POPUP: Confirm Remove Trusted Creator */}
+      {pendingDeleteEntry && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.82)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#161b22',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '480px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(239, 68, 68, 0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ef4444',
+                flexShrink: 0,
+              }}>
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#fff' }}>
+                  Remove Trusted Creator?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Web of Trust Keyring Modification
+                </span>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px',
+              padding: '14px',
+              fontSize: '13px',
+              lineHeight: 1.5,
+              color: 'var(--text-main)',
+            }}>
+              Are you sure you wish to remove <strong>@{pendingDeleteEntry.creatorName}</strong> from your trusted creator list?
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8' }}>
+                <span style={{ display: 'block', marginBottom: '2px' }}>Public Key:</span>
+                <code className="mono" style={{
+                  color: '#38bdf8',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  padding: '2px 6px',
+                  borderRadius: '4px',
+                  display: 'block',
+                  wordBreak: 'break-all',
+                }}>
+                  {pendingDeleteEntry.publicKeyHex}
+                </code>
+              </div>
+              <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#f87171' }}>
+                Models signed by this key will no longer be marked as verified or trusted unless re-added.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteEntry(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveKey}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+                }}
+              >
+                <X size={14} /> Remove Creator
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* MODAL / POPUP: Confirm Remove Model Directory */}
+      {pendingDeleteFolder && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.82)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          padding: '20px',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: '#161b22',
+            border: '1px solid rgba(239, 68, 68, 0.4)',
+            borderRadius: '16px',
+            width: '100%',
+            maxWidth: '500px',
+            padding: '24px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(239, 68, 68, 0.15)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ef4444',
+                flexShrink: 0,
+              }}>
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '17px', fontWeight: 700, color: '#fff' }}>
+                  Remove Model Directory?
+                </h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Folder Routing & Swarm Configuration
+                </span>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px',
+              padding: '14px',
+              fontSize: '13px',
+              lineHeight: 1.5,
+              color: 'var(--text-main)',
+            }}>
+              Are you sure you wish to remove this directory from your model folders list?
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#94a3b8' }}>
+                <span style={{ display: 'block', marginBottom: '2px' }}>Path:</span>
+                <code className="mono" style={{
+                  color: '#38bdf8',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  display: 'block',
+                  wordBreak: 'break-all',
+                }}>
+                  {pendingDeleteFolder.path}
+                </code>
+              </div>
+              <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: 'var(--text-muted)' }}>
+                This removes the folder from your download and routing targets. Existing files on disk will not be deleted.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setPendingDeleteFolder(null)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-subtle)',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemoveFolder}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '8px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Trash2 size={14} /> Remove Folder
               </button>
             </div>
           </div>

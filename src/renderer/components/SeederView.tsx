@@ -372,6 +372,7 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
                 <option value="TextEncoder">Text Encoder</option>
                 <option value="Controlnet">ControlNet</option>
                 <option value="Upscaler">Upscaler</option>
+                <option value="LLM">LLM / Language Model</option>
               </select>
             </div>
 
@@ -451,6 +452,17 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
               >
                 Browse Preview...
               </button>
+              {previewFilePath && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewFilePath('')}
+                  className="btn-secondary"
+                  style={{ color: '#f43f5e' }}
+                  title="Remove Preview"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 
