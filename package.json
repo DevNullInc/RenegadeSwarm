@@ -104,6 +104,20 @@
     },
     "portable": {
       "artifactName": "${productName}-Portable-v${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Network"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
     }
   }
 }

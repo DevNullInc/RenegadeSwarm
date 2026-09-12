@@ -1,4 +1,4 @@
-name: Release & Sign
+name: Release & Package
 
 on:
   push:
@@ -6,11 +6,26 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-and-package:
+    name: Build & Package (${{ matrix.os }})
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: win
+            artifact_name: RenegadeSwarm-Windows
+          - os: ubuntu-latest
+            platform: linux
+            artifact_name: RenegadeSwarm-Linux
+          - os: macos-latest
+            platform: mac
+            artifact_name: RenegadeSwarm-macOS
+
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -29,31 +44,53 @@ jobs:
       - name: Run Test Suite
         run: npm test
 
-      - name: Build Application
+      - name: Build Application Bundle
         run: npm run build
 
-      - name: Build & Package Windows (NSIS & Portable)
+      - name: Package Windows Binary (NSIS & Portable)
         if: runner.os == 'Windows'
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Package Linux (AppImage & tar.gz)
+      - name: Package Linux Binary (AppImage & tar.gz)
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux
+        run: npx electron-builder --linux --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Package macOS (DMG)
+      - name: Package macOS Binary (DMG & zip)
         if: runner.os == 'macOS'
-        run: npx electron-builder --mac
+        run: npx electron-builder --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Release Artifacts
+      - name: Upload Build Artifacts to Actions Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.dmg
+            release/*.zip
+            release/latest*.yml
+          if-no-files-found: warn
+
+      - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: release/*
+          files: |
+            release/*.exe
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.dmg
+            release/*.zip
+            release/latest*.yml
+          generate_release_notes: true
+          fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
