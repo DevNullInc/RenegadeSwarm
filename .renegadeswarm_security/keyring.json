@@ -9,122 +9,14 @@
   },
   {
     "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "989e0d634d0721ac8172a5a0d3fd4e0d47c42c4a7d16929dec34cc49c85772fe",
+    "publicKeyHex": "dada1920d9d6ae57429cbb7e8dfff7254ef7aec9d801221c8e6195e63f8a31cc",
     "trustLevel": "VerifiedCreator",
-    "addedAt": 1789240468816
+    "addedAt": 1789290958332
   },
   {
     "creatorName": "MaliciousActor",
-    "publicKeyHex": "518c6a36d89a7a5e9633e3b43ab951c56384023f3b3e893449d311b023a67cc6",
+    "publicKeyHex": "5abacc1bc131f32b3c1b3d82ba357a8ee5c3c907a601f79ab665bc0d2d76f5ba",
     "trustLevel": "Blocked",
-    "addedAt": 1789240468820
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "217de2a463d34c7cfd5e129b4199bb425ca09a0a7db7fde02e2fe53613a8df6a",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789240496387
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "b5c0b096c10604cfaf5c03fa3d9699a80206791febd8df846fdc2be7f4cee00b",
-    "trustLevel": "Blocked",
-    "addedAt": 1789240496393
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "2c9fa91c9a06d2adf313d8945293e0f30382374575f0816383dd25014ef6bea4",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789240506119
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "b9bc77ac45b7e69bf987753cfb9d609e672f26833e7951e30278e22750764b70",
-    "trustLevel": "Blocked",
-    "addedAt": 1789240506123
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "fb7da75912e62d83d9b06f025aa9df64b8551c958fa45c3a8ea5d41c216a6e8b",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789240530895
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "a4087847fec8f2fd12fd3b1bba8a5dc3b66ee0a90aae013f370b220acc3391ad",
-    "trustLevel": "Blocked",
-    "addedAt": 1789240530900
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "bcf2034d61d1ae373512db831756703be06a53fa9ff0034a84e1dbd2fb86a5e6",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789240801187
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "8acfaff7e2ce1f3ac3e842110038e0a29d1801bff277e55de346b1e5cbb3b2bc",
-    "trustLevel": "Blocked",
-    "addedAt": 1789240801192
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "46a182108a1d399850aba236143f44bf627450a1a04b4b791c079e04b7ca34ed",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789243515254
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "57a9553099b66b44be8fff0dfe23c9b3bd72c24897a587de302a929673f9b270",
-    "trustLevel": "Blocked",
-    "addedAt": 1789243515259
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "70c7513e8586196a17c086c90f1b2b2b5c77ec73488dd2bc6686fbbb55332c4f",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789288939646
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "11f11243bed4c8fdfc97e096084908b4c2e2ebc13b53dff13d1f95ef3307ef79",
-    "trustLevel": "Blocked",
-    "addedAt": 1789288939650
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "babc4cc53c11c9a87bc7a801c80aa775e42d4eb0a90ec275231efa0e4ed290f3",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789288989418
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "a2fa462b2c48759b98a3a595dd148698ecef81817692883c10cdfcb8f4e8413a",
-    "trustLevel": "Blocked",
-    "addedAt": 1789288989423
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "bd901d555afb9c28a543ca333c396a4a47355caaa7b90adcbdfa128f0314c3d7",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789289180932
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "72bd21bbc7cab7d4afff3066a5a82e615e02980d2f2700d54320b7de13b515ab",
-    "trustLevel": "Blocked",
-    "addedAt": 1789289180935
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "f276da3cc54d77f2f078385365afee98c236d33409f5f1bd2b2781a654567492",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789289464901
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "7aff855518f6fe5e6062bb27680566fda3615ffa5a12c81cc4a0c1d35acee748",
-    "trustLevel": "Blocked",
-    "addedAt": 1789289464905
+    "addedAt": 1789290958337
   }
 ]
