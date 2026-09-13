@@ -12,7 +12,7 @@
 
 ---
 
-## ⚡ Overview
+## Overview
 
 **RenegadeSwarm** is an uncensored, community-powered P2P distribution network engineered specifically for large generative AI and LLM models (Checkpoints, LoRAs, UNets, GGUFs, VAEs, Text Encoders). It empowers creators and users to seed, download, and index multi-gigabyte models without gatekeeping, centralized bandwidth throttling, rate limits, or single-point-of-failure hosting dependencies.
 
@@ -22,7 +22,7 @@ Whether you are distributing a brand-new 25GB base checkpoint or downloading com
 
 ---
 
-## 🛡️ Zero-Trust Security & User Safety Principles
+## Zero-Trust Security & User Safety Principles
 
 Security is the fundamental pillar of RenegadeSwarm. Because P2P networks allow transfers from unknown peers, RenegadeSwarm enforces a strict **Zero-Trust Defense-in-Depth Architecture** across every layer of the application so users can run, download, and seed with 100% peace of mind:
 
@@ -94,22 +94,22 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 | Feature | Description |
 |---|---|
-| 🔒 **Opt-In Model Sharing & Privacy Policy** | Strict **Opt-In by default**. Local models and completed downloads are never seeded without explicit user permission. Built-in folder and tag blacklists protect private LoRAs and proprietary checkpoints. |
-| 🔑 **Ed25519 Creator Provenance & Web of Trust** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`. Includes pre-seeded root keys, manual creator pinning, JSON bundle import/export, and machine-bound AES-256-GCM key storage. |
-| 🛡️ **Anti-Abuse Key Lockout Safeguard** | Mandatory 24-hour regeneration cooldown prevents bad actors from cycling identities or evading community blacklists. |
-| 🚀 **50GB+ Memory-Safe Streaming** | Tuned random-access disk streaming with pre-write in-memory SHA256 chunk verification prevents buffer fragmentation on multi-gigabyte models. |
-| 🛡️ **Zero-Masquerade Content Validation** | Deep magic-byte inspection strictly validates SafeTensors, GGUF, ONNX, and PyTorch headers while rejecting executables, scripts, media, and polyglots. |
-| ⚡ **Atomic RenegadeCMM Bridge** | SQLite `ATTACH DATABASE` synchronization commits downloads directly into ComfyUI folder structures (`checkpoints/`, `loras/`, `vae/`) with zero sync lag. |
-| 🌐 **BEP 19 Web Seed Bootstrapping** | New swarms bootstrap immediately from Hugging Face or CivitAI HTTP endpoints while transitioning seamlessly into decentralized P2P sharing. |
-| 💻 **Cyberpunk Desktop UI & Settings** | Dark-themed responsive dashboard with live swarm telemetry, background tray seeding, ratio governance, and complete Web of Trust settings. |
+| **Opt-In Model Sharing & Privacy Policy** | Strict **Opt-In by default**. Local models and completed downloads are never seeded without explicit user permission. Built-in folder and tag blacklists protect private LoRAs and proprietary checkpoints. |
+| **Ed25519 Creator Provenance & Web of Trust** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`. Includes pre-seeded root keys, manual creator pinning, JSON bundle import/export, and machine-bound AES-256-GCM key storage. |
+| **Anti-Abuse Key Lockout Safeguard** | Mandatory 24-hour regeneration cooldown prevents bad actors from cycling identities or evading community blacklists. |
+| **50GB+ Memory-Safe Streaming** | Tuned random-access disk streaming with pre-write in-memory SHA256 chunk verification prevents buffer fragmentation on multi-gigabyte models. |
+| **Zero-Masquerade Content Validation** | Deep magic-byte inspection strictly validates SafeTensors, GGUF, ONNX, and PyTorch headers while rejecting executables, scripts, media, and polyglots. |
+| **Atomic RenegadeCMM Bridge** | SQLite `ATTACH DATABASE` synchronization commits downloads directly into ComfyUI folder structures (`checkpoints/`, `loras/`, `vae/`) with zero sync lag. |
+| **BEP 19 Web Seed Bootstrapping** | New swarms bootstrap immediately from Hugging Face or CivitAI HTTP endpoints while transitioning seamlessly into decentralized P2P sharing. |
+| **Cyberpunk Desktop UI & Settings** | Dark-themed responsive dashboard with live swarm telemetry, background tray seeding, ratio governance, and complete Web of Trust settings. |
 
 ---
 
-## 📁 Project Architecture
+## Project Architecture
 
 ```
 RenegadeSwarm/
@@ -159,16 +159,16 @@ RenegadeSwarm/
 │       ├── App.tsx             # Main application layout & live telemetry coordinator
 │       ├── components/         # Swarm Monitor, Seeder, CMM Bridge, Bandwidth, Settings views
 │       └── styles/             # Design tokens & glassmorphism styling
-├── tests/                      # Vitest test suite (19 suites, 79 unit & integration tests)
+├── tests/                      # Vitest test suite (20 suites, 99 unit & integration tests)
 ```
 
 ---
 
-## 🔬 Rigorous Security, Privacy & Legal Verification
+## Security, Privacy & Legal Verification
 
 To give users and creators 100% peace of mind, RenegadeSwarm undergoes multi-layered automated verification, defensive SecOps audits, and penetration testing across all layers of the codebase:
 
-### 1. Comprehensive Test Suite (90 Passing Tests / 19 Suites)
+### 1. Comprehensive Test Suite (99 Passing Tests / 20 Suites)
 Every commit is validated through automated integration and unit test matrices covering:
 * **Ed25519 Cryptographic Provenance & Keyring Vault** (`tests/ed25519Signing.test.ts`, `tests/keyringManager.test.ts`): Signature generation, machine-bound AES-256-GCM encryption at rest, anti-abuse 24h lockout enforcement, SPKI/PKCS8 DER conversion, and tampering rejection.
 * **Zero-Masquerade Content Validation** (`tests/contentValidator.test.ts`): Verification of SafeTensors, GGUF, ONNX, and PyTorch headers; instant rejection of polyglot ZIPs (`PK\x03\x04`), Windows MZ (`4D 5A`), Linux ELF (`7F 45 4C 46`), Mach-O, Shebang scripts (`#!`), and MP4/MKV video containers.
@@ -190,11 +190,11 @@ Every commit is validated through automated integration and unit test matrices c
 
 ---
 
-## 📦 Installation
+## Installation
 
 Download the official standalone release for your platform from [**GitHub Releases**](https://github.com/DevNullInc/RenegadeSwarm/releases).
 
-### 🪟 Windows
+### Windows
 
 1. **Installer**: Download and run `RenegadeSwarm-Setup-<version>.exe`.
 2. **Portable**: Alternatively, download `RenegadeSwarm-Portable-v<version>.exe` for a standalone single-executable that requires no installation.
@@ -204,7 +204,7 @@ Download the official standalone release for your platform from [**GitHub Releas
 
 ---
 
-### 🍏 macOS (Unsigned App & Gatekeeper Setup)
+### macOS (Unsigned App & Gatekeeper Setup)
 
 > [!NOTE]
 > **Maintainer Hardware Notice**: The primary development and CI environments are Windows and Linux. Because maintainers do not hold a paid Apple Developer ID certificate, macOS binaries are community-tested and provided on a best-effort basis.
@@ -231,7 +231,7 @@ Once cleared, double-click `RenegadeSwarm.app` in Finder or Launchpad to launch 
 
 ---
 
-### 🐧 Linux
+### Linux
 
 ```bash
 # AppImage (Universal Linux)
@@ -244,10 +244,10 @@ sudo dpkg -i renegadeswarm_<version>_amd64.deb
 
 ---
 
-## 🚀 Quick Start (Development & Building from Source)
+## Quick Start (Development & Building from Source)
 
 ### Prerequisites
-- **Node.js**: `>= 22.0.0`
+- **Node.js**: `>= 24.0.0`
 - **npm**: `>= 10.0.0`
 - **RenegadeCMM** (Optional, for automatic ComfyUI library synchronization): [RenegadeCMM Repository](https://github.com/DevNullInc/RenegadeCMM)
 
@@ -279,7 +279,7 @@ npm test
 
 ---
 
-## 🛠️ Programmatic Usage (Protocol SDK)
+## Programmatic Usage (Protocol SDK)
 
 RenegadeSwarm exports a pure TypeScript protocol layer (`src/protocol/`) with zero Node.js/Electron API dependencies, making it suitable for CLI tools, web workers, and CI pipelines.
 
@@ -319,7 +319,7 @@ console.log('Shareable Magnet Link:', magnetUri);
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 Detailed technical specifications and operational guides are available in the [`docs/`](docs/) directory:
 
@@ -335,7 +335,7 @@ Detailed technical specifications and operational guides are available in the [`
 
 ---
 
-## 📦 Building for Production
+## Building for Production
 
 ```bash
 # Package for Windows (NSIS Installer & Portable Executable)
@@ -350,7 +350,7 @@ npm run dist:mac
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please follow these standards:
 1. Ensure all new IPC contracts or manifest fields are validated with **Zod**.
@@ -359,13 +359,13 @@ Contributions are welcome! Please follow these standards:
 
 ---
 
-## ⚖️ Usage Compliance
+## Usage Compliance
 
 RenegadeSwarm is a neutral distribution protocol. Users are solely and exclusively responsible for complying with local laws regarding data sharing, copyright, and AI model distribution. The content validation filters are technical safeguards against malware and corruption, not legal guarantees. See [**Legal Disclaimer**](docs/LEGAL_DISCLAIMER.md) for full terms and conditions.
 
 ---
 
-## 💖 Support & Sponsorship
+## Support & Sponsorship
 
 RenegadeSwarm is an independent, free, and open-source software project built to decentralize AI infrastructure for everyone. If you find RenegadeSwarm and the Renegade ecosystem valuable, consider backing development:
 
@@ -380,15 +380,15 @@ RenegadeSwarm is an independent, free, and open-source software project built to
 
 ---
 
-## 📬 Contact & Official Channels
+## Contact & Official Channels
 
-- **Bug Reports & Issues**: 📧 [`bug-report@renegadeinc.net`](mailto:bug-report@renegadeinc.net)
-- **General Inquiries & Community**: 📧 [`contact-us@renegadeinc.net`](mailto:contact-us@renegadeinc.net)
-- **Security Vulnerability Disclosures**: 📧 [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
-- **Legal Inquiries & Copyright Notices**: 📧 [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
+- **Bug Reports & Issues**: [`bug-report@renegadeinc.net`](mailto:bug-report@renegadeinc.net)
+- **General Inquiries & Community**: [`contact-us@renegadeinc.net`](mailto:contact-us@renegadeinc.net)
+- **Security Vulnerability Disclosures**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
+- **Legal Inquiries & Copyright Notices**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
 
 ---
 
-## 📜 License
+## License
 
 Licensed under the **GNU General Public License v3.0 or later** (GPL-3.0-or-later). See [`LICENSE`](LICENSE) for details.

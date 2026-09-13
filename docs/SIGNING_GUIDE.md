@@ -4,7 +4,7 @@ Cryptographic signing establishes immutable proof of authorship for AI and LLM m
 
 ---
 
-## 🛡️ Why Sign Models?
+## Why Sign Models?
 
 1. **Authorship Guarantee**: Downloader clients mathematically verify that the model was published with your private key.
 2. **Tamper Detection**: Any modification to model weights, preview images, or metadata immediately invalidates the signature.
@@ -13,7 +13,7 @@ Cryptographic signing establishes immutable proof of authorship for AI and LLM m
 
 ---
 
-## 🔑 1. Generating & Managing Your Ed25519 Keypair
+## 1. Generating & Managing Your Ed25519 Keypair
 
 ### Desktop UI Key Generator (Recommended)
 Inside the desktop application:
@@ -47,7 +47,7 @@ console.log('Private Key (KEEP SECRET):       ', privateKeyHex);
 
 ---
 
-## ✍️ 2. Building & Signing a Model Manifest
+## 2. Building & Signing a Model Manifest
 
 ```typescript
 import { buildSwarmManifest } from '../src/main/engine/manifestBuilder';
@@ -95,7 +95,7 @@ async function createAndSignModel() {
 
 ---
 
-## 🔍 3. Verifying Manifests on the Client
+## 3. Verifying Manifests on the Client
 
 When a user imports a `.swarm` file or downloads from a magnet link, RenegadeSwarm automatically executes two verification tiers:
 
@@ -120,7 +120,7 @@ console.log('Reason:', trustAssessment.reason);
 
 ---
 
-## 🌐 4. Key Distribution & Web of Trust (WoT)
+## 4. Key Distribution & Web of Trust (WoT)
 
 RenegadeSwarm uses a multi-layered key discovery and trust architecture:
 

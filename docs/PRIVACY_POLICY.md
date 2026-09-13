@@ -138,7 +138,7 @@ As an open-source project, any modifications to this Privacy Policy will be publ
 
 If you have questions regarding this Privacy Policy, data protection practices, or cryptographic privacy controls, please contact the project data protection and legal maintainers:
 
-* 📧 **Privacy & Data Protection Inquiries**: [`privacy@renegadeinc.net`](mailto:privacy@renegadeinc.net)
-* 📧 **Legal & Compliance Matters**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
-* 📧 **Security Vulnerabilities**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
-* 🌐 **Project Repository**: [https://github.com/DevNullInc/RenegadeSwarm](https://github.com/DevNullInc/RenegadeSwarm)
+* **Privacy & Data Protection Inquiries**: [`privacy@renegadeinc.net`](mailto:privacy@renegadeinc.net)
+* **Legal & Compliance Matters**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
+* **Security Vulnerabilities**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
+* **Project Repository**: [https://github.com/DevNullInc/RenegadeSwarm](https://github.com/DevNullInc/RenegadeSwarm)

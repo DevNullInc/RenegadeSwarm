@@ -4,7 +4,7 @@
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 1. [High-Level Architecture Overview](#1-high-level-architecture-overview)
 2. [Process & Boundary Isolation Model](#2-process--boundary-isolation-model)

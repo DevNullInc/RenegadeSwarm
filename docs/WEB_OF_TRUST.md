@@ -4,7 +4,7 @@ RenegadeSwarm uses a decentralized **Web of Trust (WoT)** and **Trust-On-First-U
 
 ---
 
-## 🏛️ Trust Level Tiers
+## Trust Level Tiers
 
 Every downloaded or seeded model manifest is evaluated against the local keyring:
 
@@ -17,7 +17,7 @@ Every downloaded or seeded model manifest is evaluated against the local keyring
 
 ---
 
-## 🔑 How Users Populate Their Trusted Creator List
+## How Users Populate Their Trusted Creator List
 
 Users have four simple ways to discover, add, and manage creator public keys:
 
@@ -60,7 +60,7 @@ RenegadeSwarm prevents bad actors who have been blocked by the community from ra
 
 ---
 
-## 💻 Programmatic Keyring Management
+## Programmatic Keyring Management
 
 For CLI tools and automated workers:
 

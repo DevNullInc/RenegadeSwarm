@@ -80,6 +80,6 @@ In accordance with the **GNU General Public License v3.0 (GPL-3.0)**:
 
 For general legal questions, corporate inquiries, or open-source licensing matters regarding this repository:
 
-* 📧 **Legal & Compliance**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
-* 📧 **Security Disclosures**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
-* 🌐 **Project Repository**: [https://github.com/DevNullInc/RenegadeSwarm](https://github.com/DevNullInc/RenegadeSwarm)
+* **Legal & Compliance**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
+* **Security Disclosures**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
+* **Project Repository**: [https://github.com/DevNullInc/RenegadeSwarm](https://github.com/DevNullInc/RenegadeSwarm)

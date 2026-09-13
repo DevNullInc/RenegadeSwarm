@@ -65,5 +65,5 @@ RenegadeSwarm developers do not host or store user content and have zero technic
 ## 7. Legal Inquiries & Copyright Contact
 
 For formal legal inquiries, licensing questions, or statutory notices, please contact:  
-📧 **`legal@renegadeinc.net`**
+[`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
 

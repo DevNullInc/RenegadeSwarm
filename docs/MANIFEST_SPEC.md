@@ -4,7 +4,7 @@ A **Swarm Model Manifest** (`.swarm`) is a cryptographically signed Bill of Mate
 
 ---
 
-## 📄 Manifest JSON Schema & Example
+## Manifest JSON Schema & Example
 
 Manifests are stored as human-readable JSON files with the `.swarm` extension or embedded directly into BitTorrent magnet links.
 
@@ -64,7 +64,7 @@ Manifests are stored as human-readable JSON files with the `.swarm` extension or
 
 ---
 
-## 📐 Field Reference
+## Field Reference
 
 ### Root Structure
 
@@ -119,7 +119,7 @@ Manifests are stored as human-readable JSON files with the `.swarm` extension or
 
 ---
 
-## 📏 Piece Length Sizing Strategy
+## Piece Length Sizing Strategy
 
 To balance BitTorrent DHT handshake overhead and memory buffering across 50GB+ models, RenegadeSwarm calculates piece lengths automatically:
 
@@ -133,7 +133,7 @@ To balance BitTorrent DHT handshake overhead and memory buffering across 50GB+ m
 
 ---
 
-## 🔒 Cryptographic Provenance
+## Cryptographic Provenance
 
 RenegadeSwarm uses deterministic Ed25519 payload signing. The signed digest is computed as:
 

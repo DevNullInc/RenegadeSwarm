@@ -10,7 +10,7 @@
 
 ## [Unreleased] - Active Development Cycle (Target: v0.3.0)
 
-### 🚀 Major Features & Architectural Additions
+### Major Features & Architectural Additions
 - **Pre-Download Verification Handshake (`PreDownloadVerifier`)**:
   - Implemented multi-tier pre-download verification engine (`src/main/engine/preDownloadVerifier.ts`) that validates model hashes, creator metadata, and provenance before initiating heavy weight downloads.
   - Multi-Registry Verification: Validates SHA-256 hashes against CivitAI (`/api/v1/model-versions/by-hash/:hash`) and Hugging Face repository endpoints with request timeouts and user-agent branding.
@@ -41,7 +41,7 @@
 
 ---
 
-### 🛡️ Security Hardening & Bug Fixes
+### Security Hardening & Bug Fixes
 - **AST-Free HTML Sanitizer & Entity Decoder (CWE-116 & CWE-79)**:
   - Replaced regex-based HTML stripping with a robust, AST-free character scanner (`sanitizeAndDecodeHtml`) in `src/main/metadata/modelMetadataExtractor.ts`.
   - Discards `<script>` and `<style>` blocks and their contents completely while transforming structural elements (`<br>`, `<p>`, `<li>`, headings) into clean plaintext formatting.
@@ -58,7 +58,7 @@
 
 ---
 
-### 🎨 UI & Layout Improvements
+### UI & Layout Improvements
 - **Dashboard Add Magnet Modal**:
   - Added interactive pre-download preview card with real-time verification indicators (spinners, green verified badges, yellow community warnings, red rejection alerts).
   - Added creator badge display, model type chips, base model tags, and trust score metrics.
@@ -67,7 +67,7 @@
 
 ---
 
-## 📋 Instructions for Next Version Release
+## Instructions for Next Version Release
 
 When preparing the official release (e.g., `v0.3.0`):
 1. Copy the entries under `## [Unreleased]` into `CHANGELOG.md` under `## [v0.3.0] - YYYY-MM-DD`.

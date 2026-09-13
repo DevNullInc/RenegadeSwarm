@@ -319,14 +319,60 @@ function Ensure-NodeInstalled {
     Remove-Item $InstalledMarker -Force -ErrorAction SilentlyContinue
   }
 
+  $nvmCmd = Get-Command 'nvm' -ErrorAction SilentlyContinue
   $nodeCmd = Get-Command 'node' -ErrorAction SilentlyContinue
   $npmCmd = Get-Command 'npm' -ErrorAction SilentlyContinue
 
+  # 1. Check for NVM existence first; if present, ensure Node 24 is active
+  if ($nvmCmd) {
+    $nodeVerRaw = if ($nodeCmd) { (& node -v) } else { '' }
+    $needsSwitch = $true
+    if ($nodeVerRaw -match '^v?(\d+)') {
+      if ([int]$Matches[1] -ge 24) {
+        $needsSwitch = $false
+      }
+    }
+    if ($needsSwitch) {
+      Write-Status '>>' "NVM detected. Attempting to activate Node.js 24 ('nvm use 24')..." 'Cyan'
+      try {
+        & nvm use 24 | Out-Null
+        $nodeCmd = Get-Command 'node' -ErrorAction SilentlyContinue
+        $npmCmd = Get-Command 'npm' -ErrorAction SilentlyContinue
+      } catch { }
+    }
+  }
+
+  # 2. Verify Node.js and NPM existence
   if (-not $nodeCmd -or -not $npmCmd) {
     Write-Status '!' 'Node.js runtime was not detected on this system.' 'Yellow'
-    Write-Host '  RenegadeSwarm requires Node.js (v22+ LTS recommended).' -ForegroundColor Yellow
+    Write-Host '  RenegadeSwarm requires Node.js (v24+ LTS recommended, v20 minimum).' -ForegroundColor Yellow
+    Write-Host '  To install Node version management on Windows, visit: https://nvm-windows.com/' -ForegroundColor Cyan
     exit 1
   }
+
+  # 3. Version inspection, fallback to Node 20, and guidance
+  try {
+    $nodeVerRaw = & node -v
+    if ($nodeVerRaw -match '^v?(\d+)') {
+      $major = [int]$Matches[1]
+      if ($major -lt 20) {
+        Write-Status '!' "Active Node.js version is $nodeVerRaw. RenegadeSwarm requires at least Node.js v20.0.0 (v24+ recommended)." 'Red'
+        if (-not $nvmCmd) {
+          Write-Host '  Install NVM for Windows from https://nvm-windows.com/ to upgrade easily.' -ForegroundColor Yellow
+        }
+        exit 1
+      } elseif ($major -lt 24) {
+        if ($nvmCmd) {
+          Write-Status '!' "Node.js 24 is not installed in NVM (currently running $nodeVerRaw). Falling back to Node $major." 'Yellow'
+          Write-Host '  Run `nvm install 24 && nvm use 24` to upgrade to Node 24.' -ForegroundColor DarkCyan
+        } else {
+          Write-Status '!' "Node.js $nodeVerRaw is active. (Node.js v24+ LTS recommended to avoid build deprecation notices)." 'Yellow'
+          Write-Host '  NVM was not detected. To install NVM for Windows, visit: https://nvm-windows.com/' -ForegroundColor Cyan
+          Write-Host '  Continuing with active Node.js runtime...' -ForegroundColor DarkGray
+        }
+      }
+    }
+  } catch { }
 
   if (-not (Test-Path $nodeModulesDir)) {
     Write-Status '>>' 'Installing dependencies (npm install)...' 'Cyan'
@@ -499,7 +545,7 @@ function Show-Help {
   Write-Host '    status             Display current application state, ports, PID, and CMM bridge' -ForegroundColor White
   Write-Host '    build              Compile TypeScript main & Vite renderer bundles' -ForegroundColor White
   Write-Host '    package, dist      Build standalone installer / executable via electron-builder' -ForegroundColor White
-  Write-Host '    test               Run the 17 Vitest test suites' -ForegroundColor White
+  Write-Host '    test               Run the 20 Vitest test suites' -ForegroundColor White
   Write-Host '    clean-assets       Prune stale/orphaned build chunks' -ForegroundColor White
   Write-Host '    help               Display this help text' -ForegroundColor White
   Write-Host ''

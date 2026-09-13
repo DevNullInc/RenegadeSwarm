@@ -4,7 +4,7 @@ This guide provides actionable solutions for common network, storage, verificati
 
 ---
 
-## 🌐 1. Network & Swarm Connectivity
+## 1. Network & Swarm Connectivity
 
 ### Symptom: 0 Connected Peers on Active Models
 - **Potential Causes**:
@@ -19,7 +19,7 @@ This guide provides actionable solutions for common network, storage, verificati
 
 ---
 
-## 🛡️ 2. Quarantine & Content Validation Failures
+## 2. Quarantine & Content Validation Failures
 
 ### Symptom: Transfer Status Shows "Quarantine" or "Rejected"
 RenegadeSwarm uses a strict multi-pass validation gate before any file is promoted into your ComfyUI models directory.
@@ -34,7 +34,7 @@ RenegadeSwarm uses a strict multi-pass validation gate before any file is promot
 
 ---
 
-## 💾 3. RenegadeCMM Bridge Integration
+## 3. RenegadeCMM Bridge Integration
 
 ### Symptom: "CMM Bridge Offline" or Database Locked
 - **Potential Causes**:
@@ -47,7 +47,7 @@ RenegadeSwarm uses a strict multi-pass validation gate before any file is promot
 
 ---
 
-## ⚖️ 4. Seeding Quotas & Bandwidth Governance
+## 4. Seeding Quotas & Bandwidth Governance
 
 ### Symptom: Seeding Halts Automatically
 - **Expected Behavior**: When **Auto-halt at ratio cap** (e.g. `2.0x`) is enabled in **Network & Quotas**, RenegadeSwarm stops uploading once your total uploaded bytes equal twice the download size.
@@ -58,7 +58,7 @@ RenegadeSwarm uses a strict multi-pass validation gate before any file is promot
 
 ---
 
-## 📊 5. Extracting Diagnostic Logs
+## 5. Extracting Diagnostic Logs
 
 If you encounter unexpected errors:
 1. Press `Ctrl + Shift + I` (or `Cmd + Option + I` on macOS) to open the DevTools console.
@@ -69,10 +69,10 @@ If you encounter unexpected errors:
 
 ---
 
-## 📬 6. Support, Contact & Bug Reports
+## 6. Support, Contact & Bug Reports
 
 If you discover a bug or encounter issues not covered in this guide:
-- **Bug Reports**: Open an issue on GitHub or email 📧 **`bug-report@renegadeinc.net`** with your platform details and logs.
-- **General Inquiries & Community**: Contact 📧 **`contact-us@renegadeinc.net`**
-- **Security Vulnerabilities**: Report confidentially to 📧 **`security@renegadeinc.net`**
-- **Legal & Compliance Inquiries**: Contact 📧 **`legal@renegadeinc.net`**
+- **Bug Reports**: Open an issue on GitHub or email [`bug-report@renegadeinc.net`](mailto:bug-report@renegadeinc.net) with your platform details and logs.
+- **General Inquiries & Community**: Contact [`contact-us@renegadeinc.net`](mailto:contact-us@renegadeinc.net)
+- **Security Vulnerabilities**: Report confidentially to [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
+- **Legal & Compliance Inquiries**: Contact [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)

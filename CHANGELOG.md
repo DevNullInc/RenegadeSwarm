@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.0] - 2026-09-12
 
-### 🚀 Major Features & Architectural Additions
+### Major Features & Architectural Additions
 
 #### 1. CivitAI & Hugging Face Auto-Population & Metadata Synchronization
 - **Automatic Model Architecture Detection (`isLlmModel`)**:
@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-### 🛡️ Security Hardening & Injection Defenses
+### Security Hardening & Injection Defenses
 
 #### 1. Strict Browse-Only Path Inputs
 - Removed all arbitrary string text inputs for filesystem locations (model files, directory roots, SQLite databases, and preview media).
@@ -81,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-### 🎨 User Interface & Layout Improvements
+### User Interface & Layout Improvements
 
 - **Full-Area Responsive Scaling**:
   - Redesigned all main application views (`DashboardView`, `CmmSyncView`, `SeederView`, `SettingsView`, `BandwidthView`) with dynamic flex layouts.
@@ -93,26 +93,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-### 📖 Documentation Architecture
+### Documentation Architecture
 
 - **System Architecture & P2P Protocol Guide (`docs/ARCHITECTURE.md`)**:
   - Authored a comprehensive technical architecture guide covering process boundaries, P2P network discovery (Trackers, BEP 42 DHT, PEX), binary BitTorrent wire protocol framing, 16KB piece pipelining, Tit-for-Tat choking/unchoking, sequence diagrams for seeding and downloading, and the RenegadeCMM SQLite `ATTACH DATABASE` bridge.
 - **Privacy Policy & Data Handling Specification (`docs/PRIVACY_POLICY.md`)**:
-  - Published comprehensive privacy policy grounded in zero-telemetry architecture, local-first endpoint storage, transparent BitTorrent IP transmission realities, opt-in model sharing controls, and self-sovereign GDPR/CCPA user rights.
+  - Complete zero-telemetry privacy policy covering local storage, P2P IP disclosures, and GDPR/CCPA user rights.
+- **Legal Disclaimer & Non-Liability Notice (`docs/LEGAL_DISCLAIMER.md`)**:
+  - Legal framework detailing decentralized P2P neutrality, Betamax doctrine protections, and statutory non-liability boundaries.
 - **DMCA & Copyright Non-Liability Notice (`docs/DMCA_NOTICE.md`)**:
-  - Published statutory notice detailing DMCA § 512 non-hosting status, technical impossibility of P2P takedowns, Sony-Betamax substantial non-infringing use protections, and proper recourse channels for rights holders.
-- **Development Changelog System (`DEV-CHANGELOG.md`)**:
-  - Standardized rolling developer changelog to track unreleased improvements across version cycles.
+  - DMCA § 512 non-hosting notice detailing technical impossibility of P2P decentralized takedowns and designated DMCA agent channels.
 
 ---
 
-### 🧪 Quality Assurance & Testing
+### Quality Assurance & Testing
 
-- **Comprehensive Test Suite**:
-  - **90/90** automated unit tests passing across **19** test suites in Vitest.
+- **Comprehensive Vitest Test Suite**:
+  - **99/99** automated unit tests passing across **20** test suites in Vitest.
   - Dedicated test coverage for LLM detection, HTML entity sterilization & trigger formatting, CivitAI hash checking, Hugging Face API polling, SQLite ATTACH database write-back, SFW vs. NSFW preview filtering, CMM multi-folder routing, and keyring lockout.
 - **GNU GPL-3.0 License Verification**:
   - Automated license header application across all 58 repository source and test files.
+- **Development Changelog System (`DEV-CHANGELOG.md`)**:
+  - Standardized rolling developer changelog to track unreleased improvements across version cycles.
 
 ---
 

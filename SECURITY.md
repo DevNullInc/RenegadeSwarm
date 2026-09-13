@@ -22,18 +22,18 @@ The **RenegadeSwarm** maintainers and contributors are committed to ensuring the
 
 ---
 
-## 🛡️ Supported Versions
+## Supported Versions
 
 We actively provide security patches and updates for the following release branches:
 
 | Version | Supported | Security Patch Window |
 | :--- | :---: | :--- |
-| **0.1.x (Current / Main)** | ✅ Yes | Active development & critical hotfixes |
-| **< 0.1.0** | ❌ No | Deprecated / Unsupported |
+| **0.2.x (Current / Main)** | ✅ Yes | Active development & critical hotfixes |
+| **< 0.2.0** | ❌ No | Deprecated / Unsupported |
 
 ---
 
-## 🔒 Reporting a Vulnerability
+## Reporting a Vulnerability
 
 If you discover a security vulnerability in RenegadeSwarm, please **do not open a public issue**. Publicly disclosing vulnerabilities puts the entire community at risk before a fix can be staged and deployed.
 
@@ -43,11 +43,11 @@ If you discover a security vulnerability in RenegadeSwarm, please **do not open 
    Submit a confidential advisory directly via GitHub at [**Security → Advisories → Report a vulnerability**](https://github.com/DevNullInc/RenegadeSwarm/security/advisories/new).
 2. **Direct Security Email**:  
    If you prefer encrypted communication or cannot use GitHub Advisories, email the core security team at:  
-   📧 **`security@renegadeinc.net`** (or PGP-encrypted to key fingerprint listed in maintainer profiles).
+   [`security@renegadeinc.net`](mailto:security@renegadeinc.net) (or PGP-encrypted to key fingerprint listed in maintainer profiles).
 
 > [!NOTE]
-> For standard (non-security) bugs, please open a GitHub issue or email 📧 `bug-report@renegadeinc.net`.  
-> For legal inquiries, contact 📧 `legal@renegadeinc.net`. For general project questions, contact 📧 `contact-us@renegadeinc.net`.
+> For standard (non-security) bugs, please open a GitHub issue or email [`bug-report@renegadeinc.net`](mailto:bug-report@renegadeinc.net).  
+> For legal inquiries, contact [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net). For general project questions, contact [`contact-us@renegadeinc.net`](mailto:contact-us@renegadeinc.net).
 
 ### Information to Include in Your Report
 
@@ -60,7 +60,7 @@ To help us investigate, triage, and patch the issue quickly, please include:
 
 ---
 
-## ⏱️ Response & Triage Timelines
+## Response & Triage Timelines
 
 Our security team adheres to strict SLAs:
 
@@ -75,7 +75,7 @@ Once a patch is developed and verified, we coordinate a public release along wit
 
 ---
 
-## 🏗️ Security Architecture & Trust Boundaries
+## Security Architecture & Trust Boundaries
 
 RenegadeSwarm enforces a **Zero-Trust Defense-in-Depth Architecture** designed around strict isolation:
 
@@ -108,7 +108,7 @@ RenegadeSwarm enforces a **Zero-Trust Defense-in-Depth Architecture** designed a
 
 ---
 
-## 🎯 Scope & Out-of-Scope Definitions
+## Scope & Out-of-Scope Definitions
 
 ### In-Scope Vulnerabilities
 - Remote Code Execution (RCE) via malicious torrent pieces, manifests, or headers.
@@ -128,7 +128,7 @@ RenegadeSwarm enforces a **Zero-Trust Defense-in-Depth Architecture** designed a
 
 ---
 
-## 🤝 Researcher Safe Harbor
+## Researcher Safe Harbor
 
 We consider security research conducted under this policy to be **authorized**. We pledge that:
 - We will not pursue legal action or initiate law enforcement reports against researchers who:
