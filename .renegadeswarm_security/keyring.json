@@ -114,5 +114,17 @@
     "publicKeyHex": "72bd21bbc7cab7d4afff3066a5a82e615e02980d2f2700d54320b7de13b515ab",
     "trustLevel": "Blocked",
     "addedAt": 1789289180935
+  },
+  {
+    "creatorName": "TrustedCustomCreator",
+    "publicKeyHex": "f276da3cc54d77f2f078385365afee98c236d33409f5f1bd2b2781a654567492",
+    "trustLevel": "VerifiedCreator",
+    "addedAt": 1789289464901
+  },
+  {
+    "creatorName": "MaliciousActor",
+    "publicKeyHex": "7aff855518f6fe5e6062bb27680566fda3615ffa5a12c81cc4a0c1d35acee748",
+    "trustLevel": "Blocked",
+    "addedAt": 1789289464905
   }
 ]

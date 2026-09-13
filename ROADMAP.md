@@ -6,10 +6,11 @@
 
 ## 🎯 Guiding Principles
 
-1. **AI-First & Protocol-Enforced**: RenegadeSwarm is purpose-built for AI model weights, checkpoints, LoRAs, VAEs, GGUFs, and embedded generation workflows. Generic, non-AI binary payloads are strictly rejected at the protocol layer.
-2. **Cryptographic Provenance & Web of Trust (WoT)**: Every model manifest carries Ed25519 creator signatures and integrity checksums verified against local keyrings.
-3. **Resilient User Experience**: Long-running background operations (hashing, piece streaming, packaging, syncing) must survive UI state transitions and application restarts.
-4. **Metadata-First Pre-Flight Verification**: Always harvest and verify lightweight metadata and cryptographic hashes before downloading multi-gigabyte tensor weight blocks.
+1. **AI-First & Protocol-Enforced**: RenegadeSwarm is purpose-built exclusively for AI model weights, checkpoints, LoRAs, VAEs, GGUFs, and embedded generation workflows. Generic, non-AI binary payloads (movies, pirated software, arbitrary archives) are strictly rejected at the protocol layer.
+2. **RenegadeSwarm-Exclusive P2P Discovery**: Search queries communicate only with verified live instances of RenegadeSwarm, filtering out generic BitTorrent traffic through application-specific handshakes and signed metadata broadcasts.
+3. **Cryptographic Provenance & Web of Trust (WoT)**: Every model manifest carries Ed25519 creator signatures and integrity checksums verified against local keyrings.
+4. **Resilient User Experience**: Long-running background operations (hashing, piece streaming, packaging, syncing) must survive UI state transitions and application restarts.
+5. **Metadata-First Pre-Flight Verification**: Always harvest and verify lightweight metadata and cryptographic hashes before downloading multi-gigabyte tensor weight blocks.
 
 ---
 
@@ -17,15 +18,36 @@
 
 ```mermaid
 flowchart TD
-    M1[1. Packaging State Hoisting & Job Resilience] --> M2[2. Scoped Companion Asset Discovery]
-    M2 --> M3[3. Strict AI Model Payload Gatekeeping]
-    M3 --> M4[4. Companion Triplet Pre-Flight Handshake]
-    M4 --> M5[5. Scoped P2P AI Model Discovery & Search]
+    M1[🔥 1. RenegadeSwarm-Exclusive P2P Search & Discovery Engine] --> M2[2. Packaging State Hoisting & Job Resilience]
+    M2 --> M3[3. Scoped Companion Asset Harvesting]
+    M3 --> M4[4. Strict AI Model Payload Gatekeeping]
+    M4 --> M5[5. Companion Triplet Pre-Flight Handshake]
 ```
 
 ---
 
-### Milestone 1: Packaging State Hoisting & Job Resilience
+### Milestone 1: RenegadeSwarm-Exclusive P2P Search & Discovery Engine 🔥 *(First Priority)*
+
+#### 📌 Problem Statement
+Currently, finding models on RenegadeSwarm requires users to manually copy and paste Magnet URIs from external web pages. However, enabling open-ended torrent crawling or DHT scraping would open the floodgates to non-AI garbage, pirated movies, and malicious software. Swarm needs an in-app, decentralized model search engine that is strictly isolated from standard BitTorrent noise.
+
+#### 🛠️ Architectural Plan
+- **Filter Standard BitTorrent Traffic**:
+  - The search subsystem completely ignores standard public BitTorrent swarm announces and tracker scrapings.
+  - Search queries and broadcast announces operate exclusively across **live instances of RenegadeSwarm**.
+- **Application-Specific BEP 10 Extension Handshake (`RS_MODEL_DISCOVERY_V1`)**:
+  - Peers identify themselves during the BitTorrent extension handshake (BEP 10) by broadcasting custom capability dictionaries (`renegade_swarm_version`, `model_catalog_digest`).
+  - Only peers that complete the certified RenegadeSwarm handshake participate in search routing.
+- **Signed Manifest & Metadata Broadcasts**:
+  - Model seeding nodes announce cryptographically signed model catalog summaries (`SwarmManifest` summaries containing model title, base model, model type, creator Ed25519 key, and SHA-256 hash).
+  - Search hits are verified against local CMM format schemas before appearing in the search results UI.
+- **Amber Warning System for Raw / Unverified Checkpoints**:
+  - **Verified Shield**: Displayed when search results contain valid companion JSON, known creator Ed25519 signatures, and verified SHA-256 hashes.
+  - **Amber Warning Panel**: If a user selects a community or unverified raw model lacking companion metadata, Swarm displays a prominent Amber Warning dialog detailing the missing provenance and requires explicit user confirmation before initiating the pre-download handshake.
+
+---
+
+### Milestone 2: Packaging State Hoisting & Job Resilience
 
 #### 📌 Problem Statement
 When a user prepares a model package in the **Package & Seed** view, enters metadata, and triggers hash calculation and manifest generation, navigating to another tab (e.g., *Dashboard* or *Bandwidth*) unmounts the React view. This unmounting wipes the form inputs and progress indicators from the UI even though the background IPC worker is still actively computing the SHA-256 hash and assembling the manifest.
@@ -41,7 +63,7 @@ When a user prepares a model package in the **Package & Seed** view, enters meta
 
 ---
 
-### Milestone 2: Scoped Companion Asset Harvesting & Local Directory Tree Discovery
+### Milestone 3: Scoped Companion Asset Harvesting & Local Directory Tree Discovery
 
 #### 📌 Problem Statement
 Swarm's companion asset scanner previously probed generic OS picture directories instead of scoping strictly to the model's actual parent directory and configured AI workspace roots (e.g., ComfyUI `models/` or WebUI `embeddings/`). This caused companion images (`<model>.png`, `<model>.preview.png`) to be missed during packaging.
@@ -60,7 +82,7 @@ Swarm's companion asset scanner previously probed generic OS picture directories
 
 ---
 
-### Milestone 3: Strict AI Model Payload Enforcement (Add Magnet Gatekeeping)
+### Milestone 4: Strict AI Model Payload Enforcement (Add Magnet Gatekeeping)
 
 #### 📌 Problem Statement
 Preventing RenegadeSwarm from being misused as a generic P2P downloader for non-AI content (such as pirated software or arbitrary binaries) requires proactive payload validation prior to allocating disk space.
@@ -75,24 +97,6 @@ Preventing RenegadeSwarm from being misused as a generic P2P downloader for non-
 - **Magic Byte Enforcement**:
   - Prohibit executable signatures (`MZ`, `ELF`, `Mach-O`), generic archives (`RAR`, `7z`), and shell scripts (`#!`).
   - Reject non-compliant torrents immediately with clear UI feedback.
-
----
-
-### Milestone 4: Scoped P2P AI Model Discovery & Curated Search
-
-#### 📌 Problem Statement
-Currently, Swarm relies on manually pasting Magnet URIs. Adding open-ended torrent indexing would expose users to generic junk. A dedicated search feature must remain strictly locked to open-weight AI models with clear provenance signaling.
-
-#### 🛠️ Architectural Plan
-- **Scoped Model Discovery Engine**:
-  - Query DHT and swarm nodes for certified `SwarmManifest` announcements tagged with model metadata (base model, creator, type, tags).
-  - Filter out any announcement lacking a valid AI manifest payload.
-- **Metadata Verification & Trust Scoring**:
-  - Verify presence of companion JSON and SHA-256 checksums on all search results.
-  - Cross-reference creator signatures against the local Web of Trust (WoT) keyring.
-- **Amber Warning System for Raw / Unverified Checkpoints**:
-  - Display green shield badges for verified, signed models with full companion data.
-  - Display a prominent **Amber Warning Panel** when a user attempts to fetch an unverified or raw checkpoint with missing metadata, requiring explicit user confirmation before download.
 
 ---
 
@@ -118,13 +122,13 @@ Downloading large models (2GB to 50GB+) before verifying file integrity or creat
 
 ## 📊 Milestone Execution & Status Matrix
 
-| Milestone | Focus Area | Status | Target Version |
-| :--- | :--- | :---: | :---: |
-| **Milestone 1** | Packaging State Hoisting & Background Job Persistence | 🔄 In Design | v0.3.0 |
-| **Milestone 2** | Scoped Companion Asset Harvesting & Workflow Discovery | ✅ Implemented | v0.2.0 |
-| **Milestone 3** | Strict AI Model Payload Gatekeeping & Magic Byte Rejection | ✅ Implemented | v0.2.0 |
-| **Milestone 4** | Scoped P2P AI Model Discovery & Amber Unverified Warning | 📅 Scheduled | v0.3.0 |
-| **Milestone 5** | Companion Triplet Pre-Flight Handshake & Quarantine Verification | ✅ Implemented | v0.2.0 |
+| Milestone | Priority | Focus Area | Status | Target Version |
+| :--- | :---: | :--- | :---: | :---: |
+| **Milestone 1** | 🔥 **P1 (Top)** | RenegadeSwarm-Exclusive P2P Model Search & Discovery | 🔄 In Design | v0.3.0 |
+| **Milestone 2** | **P2** | Packaging State Hoisting & Background Job Persistence | 🔄 In Design | v0.3.0 |
+| **Milestone 3** | **P3** | Scoped Companion Asset Harvesting & Workflow Discovery | ✅ Implemented | v0.2.0 |
+| **Milestone 4** | **P4** | Strict AI Model Payload Gatekeeping & Magic Byte Rejection | ✅ Implemented | v0.2.0 |
+| **Milestone 5** | **P5** | Companion Triplet Pre-Flight Handshake & Quarantine Verification | ✅ Implemented | v0.2.0 |
 
 ---
 
@@ -133,8 +137,12 @@ Downloading large models (2GB to 50GB+) before verifying file integrity or creat
 Accelerating these milestones and maintaining robust P2P testing infrastructure is made possible by community support. If you want to support development, consider becoming a sponsor:
 
 [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-%E2%9D%A4%20DevNullInc-ea4aaa?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/stygianrenegade)
+[![Donate with PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ME25M8VZRNSEN)
 
-- **Official Sponsor Page**: [github.com/sponsors/DevNullInc](https://github.com/sponsors/DevNullInc)
+- **GitHub Sponsors**: [github.com/sponsors/DevNullInc](https://github.com/sponsors/DevNullInc)
+- **Ko-fi**: [ko-fi.com/stygianrenegade](https://ko-fi.com/stygianrenegade)
+- **PayPal**: [Direct Donation](https://www.paypal.com/ncp/payment/ME25M8VZRNSEN)
 
 ---
 
