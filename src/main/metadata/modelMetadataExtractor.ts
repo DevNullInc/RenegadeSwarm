@@ -22,12 +22,15 @@ import os from 'os';
 import crypto from 'crypto';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
 import { sharingPolicyManager } from '../engine/sharingPolicyManager';
+import { inspectImageWorkflowMetadata } from '../../protocol/contentValidator';
 
 export interface ExtractedModelMetadata {
   modelFilePath: string;
   fileName: string;
   fileSizeBytes: number;
   previewFilePath?: string;
+  hasWorkflow?: boolean;
+  workflowType?: string;
   title: string;
   version: string;
   modelType: string;
@@ -197,6 +200,82 @@ export function sanitizeAndDecodeHtml(rawText?: string): string {
   return text;
 }
 
+export interface CompanionFilesDiscovery {
+  companionHash?: string;
+  companionInfo?: any;
+  companionInfoPath?: string;
+  localImagePath?: string;
+}
+
+/**
+ * Discovers companion assets (.sha256, .civitai.info, .info, .huggingface.info, .json, and preview images)
+ * located alongside the model file.
+ */
+export function discoverCompanionFiles(filePath: string): CompanionFilesDiscovery {
+  const ext = path.extname(filePath);
+  const baseWithoutExt = filePath.slice(0, -ext.length);
+  const result: CompanionFilesDiscovery = {};
+
+  // 1. Companion Image Candidates
+  const imageExtensions = [
+    '.jpeg',
+    '.jpg',
+    '.png',
+    '.webp',
+    '.preview.png',
+    '.preview.jpg',
+    '.preview.jpeg',
+    '.preview.webp',
+  ];
+  for (const imgExt of imageExtensions) {
+    const candidate = `${baseWithoutExt}${imgExt}`;
+    if (fs.existsSync(candidate)) {
+      try {
+        const stat = fs.statSync(candidate);
+        if (stat.isFile() && stat.size > 0) {
+          result.localImagePath = candidate;
+          break;
+        }
+      } catch {}
+    }
+  }
+
+  // 2. Companion Hash (.sha256)
+  const shaCandidate = `${baseWithoutExt}.sha256`;
+  if (fs.existsSync(shaCandidate)) {
+    try {
+      const content = fs.readFileSync(shaCandidate, 'utf8').trim();
+      const match = content.match(/^[a-fA-F0-9]{64}$/);
+      if (match) {
+        result.companionHash = match[0].toLowerCase();
+      }
+    } catch {}
+  }
+
+  // 3. Companion Metadata Info (.civitai.info, .info, .huggingface.info, .json)
+  const infoCandidates = [
+    `${baseWithoutExt}.civitai.info`,
+    `${baseWithoutExt}.info`,
+    `${baseWithoutExt}.huggingface.info`,
+    `${baseWithoutExt}.json`,
+  ];
+  for (const infoCandidate of infoCandidates) {
+    if (fs.existsSync(infoCandidate)) {
+      try {
+        const raw = fs.readFileSync(infoCandidate, 'utf8');
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          result.companionInfo = parsed;
+          result.companionInfoPath = infoCandidate;
+          break;
+        }
+      } catch {}
+    }
+  }
+
+  return result;
+}
+
 export class ModelMetadataExtractor {
   /**
    * Identifies whether a given model file or specification is an LLM (Large Language Model)
@@ -287,8 +366,8 @@ export class ModelMetadataExtractor {
   }
 
   /**
-   * Extracts metadata from local file headers, RenegadeCMM DB, and online registries (CivitAI/HuggingFace).
-   * Automatically checks SHA256 against CivitAI for non-LLM models and pulls creator, tags, and SFW preview images.
+   * Extracts metadata from local file headers, companion files (.sha256, .civitai.info),
+   * RenegadeCMM DB, and online registries (CivitAI/HuggingFace).
    */
   async extractMetadata(filePath: string): Promise<ExtractedModelMetadata> {
     const resolvedPath = path.resolve(filePath);
@@ -312,24 +391,118 @@ export class ModelMetadataExtractor {
     let civitaiVersionId: number | undefined;
     let hfRepoId: string | undefined;
     let sha256: string | undefined;
-    let previewFilePath = this.findSiblingPreviewImage(dir, fileName);
+
+    // 0. Discover companion files (.sha256, .civitai.info, .info, .huggingface.info, images)
+    const companion = discoverCompanionFiles(resolvedPath);
+    let previewFilePath = companion.localImagePath || this.findSiblingPreviewImage(dir, fileName);
+
+    if (companion.companionHash) {
+      sha256 = companion.companionHash.toLowerCase();
+    }
+
+    if (companion.companionInfo) {
+      const info = companion.companionInfo;
+      const isHf =
+        info.source === 'huggingface' ||
+        Boolean(info.pipeline_tag) ||
+        Boolean(info.cardData) ||
+        Boolean(info.repoId) ||
+        (typeof info.id === 'string' && (info.id.includes('/') || info.author));
+
+      if (isHf) {
+        // Hugging Face format metadata payload
+        if (info.id || info.repoId) hfRepoId = info.id || info.repoId;
+        if (info.author) creator = sanitizeAndDecodeHtml(info.author);
+        if (info.modelName) title = sanitizeAndDecodeHtml(info.modelName);
+        if (info.pipeline_tag) modelType = this.normalizeModelType(info.pipeline_tag);
+        if (info.cardData?.base_model) {
+          const bm = info.cardData.base_model;
+          baseModel = sanitizeAndDecodeHtml(Array.isArray(bm) ? bm[0] : bm);
+        }
+        if (Array.isArray(info.tags)) {
+          for (const t of info.tags) {
+            const cleanTag = sanitizeAndDecodeHtml(t);
+            if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+          }
+        }
+        if (info.description) {
+          description = sanitizeAndDecodeHtml(info.description);
+        }
+      } else if (info.modelId || info.id || info.model?.name || info.name) {
+        // CivitAI format metadata payload
+        if (info.model?.name || info.name) {
+          const modelName = info.model?.name || info.name;
+          const versionName = info.name && info.name !== modelName ? info.name : '';
+          title =
+            versionName && !modelName.includes(versionName)
+              ? `${modelName} (${versionName})`
+              : modelName;
+          title = sanitizeAndDecodeHtml(title);
+        }
+        if (typeof info.id === 'number') civitaiVersionId = info.id;
+        if (typeof info.modelId === 'number' || typeof info.model?.id === 'number') {
+          civitaiModelId = info.modelId || info.model?.id;
+        }
+        if (info.model?.creator?.username) {
+          creator = sanitizeAndDecodeHtml(info.model.creator.username);
+        }
+        if (info.baseModel) {
+          baseModel = sanitizeAndDecodeHtml(info.baseModel);
+        }
+        if (info.model?.type || info.type) {
+          modelType = this.normalizeModelType(info.model?.type || info.type);
+        }
+        const rawTags = info.model?.tags || info.tags;
+        if (Array.isArray(rawTags)) {
+          for (const t of rawTags) {
+            const tagStr = typeof t === 'string' ? t : t?.name || t?.tag?.name;
+            const cleanTag = sanitizeAndDecodeHtml(tagStr);
+            if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+          }
+        }
+        const rawTrained = info.trainedWords || info.model?.trainedWords;
+        const trainedWords: string[] = [];
+        if (Array.isArray(rawTrained)) {
+          for (const w of rawTrained) {
+            const cleanWord = sanitizeAndDecodeHtml(typeof w === 'string' ? w : '');
+            if (cleanWord) {
+              trainedWords.push(cleanWord);
+              if (!tags.includes(cleanWord)) tags.push(cleanWord);
+            }
+          }
+        }
+        let desc = sanitizeAndDecodeHtml(info.description || info.model?.description);
+        if (trainedWords.length > 0) {
+          const triggerLine = trainedWords.join(', ');
+          if (!desc || !desc.includes(trainedWords[0])) {
+            desc = desc ? `${triggerLine}\n\n${desc}` : triggerLine;
+          }
+        }
+        if (desc) {
+          description = desc;
+        }
+      }
+    }
 
     // 1. Try extracting embedded metadata from .safetensors header
     if (ext === '.safetensors') {
       try {
         const headerMeta = await this.readSafetensorsMetadata(resolvedPath);
         if (headerMeta) {
-          if (headerMeta.title) title = sanitizeAndDecodeHtml(headerMeta.title);
-          if (headerMeta.author) creator = sanitizeAndDecodeHtml(headerMeta.author);
+          if (headerMeta.title && !title) title = sanitizeAndDecodeHtml(headerMeta.title);
+          if (headerMeta.author && !creator) creator = sanitizeAndDecodeHtml(headerMeta.author);
           if (headerMeta.version) version = headerMeta.version;
-          if (headerMeta.architecture || headerMeta.baseModel) {
+          if ((headerMeta.architecture || headerMeta.baseModel) && !baseModel) {
             baseModel = sanitizeAndDecodeHtml(headerMeta.architecture || headerMeta.baseModel);
           }
-          if (headerMeta.description) description = sanitizeAndDecodeHtml(headerMeta.description);
+          if (headerMeta.description && !description) description = sanitizeAndDecodeHtml(headerMeta.description);
           if (headerMeta.tags && Array.isArray(headerMeta.tags)) {
-            tags = headerMeta.tags.map((t: string) => sanitizeAndDecodeHtml(t)).filter(Boolean);
+            for (const t of headerMeta.tags) {
+              const cleanTag = sanitizeAndDecodeHtml(t);
+              if (cleanTag && !tags.includes(cleanTag)) tags.push(cleanTag);
+            }
           }
-          if (headerMeta.modelType) modelType = headerMeta.modelType;
+          if (headerMeta.modelType && (!modelType || modelType === 'Checkpoint')) modelType = headerMeta.modelType;
         }
       } catch {
         // Fall through on corrupt or partial headers
@@ -345,11 +518,11 @@ export class ModelMetadataExtractor {
 
       if (matched) {
         if (!title && matched.civitai_name) title = sanitizeAndDecodeHtml(matched.civitai_name);
-        if (matched.civitai_model_id) civitaiModelId = matched.civitai_model_id;
-        if (matched.civitai_version_id) civitaiVersionId = matched.civitai_version_id;
-        if (matched.hf_repo_id) hfRepoId = matched.hf_repo_id;
-        if (matched.model_type) modelType = this.normalizeModelType(matched.model_type);
-        if (matched.sha256) sha256 = matched.sha256.toLowerCase();
+        if (matched.civitai_model_id && !civitaiModelId) civitaiModelId = matched.civitai_model_id;
+        if (matched.civitai_version_id && !civitaiVersionId) civitaiVersionId = matched.civitai_version_id;
+        if (matched.hf_repo_id && !hfRepoId) hfRepoId = matched.hf_repo_id;
+        if (matched.model_type && (!modelType || modelType === 'Checkpoint')) modelType = this.normalizeModelType(matched.model_type);
+        if (matched.sha256 && !sha256) sha256 = matched.sha256.toLowerCase();
       }
     } catch {
       // CMM DB not available
@@ -361,7 +534,7 @@ export class ModelMetadataExtractor {
       modelType = 'LLM';
     }
 
-    // 4. Compute SHA256 if not already cached from CMM database (up to 4GB files)
+    // 4. Compute SHA256 if not already harvested from companion .sha256 or CMM database
     if (!sha256) {
       try {
         if (stat.size <= 4 * 1024 * 1024 * 1024) {
@@ -372,9 +545,10 @@ export class ModelMetadataExtractor {
       }
     }
 
-    // 5. If NOT an LLM and SHA256 hash is available, check CivitAI registry
+    // 5. If NOT an LLM and SHA256 hash is available, check CivitAI registry if any info is missing
     let civitaiInfo: any = null;
-    if (!isLlm && sha256) {
+    const needsCivitaiLookup = !title || !creator || !baseModel || !description || tags.length === 0 || !previewFilePath;
+    if (!isLlm && sha256 && needsCivitaiLookup) {
       try {
         const allowNsfw = sharingPolicyManager.getPolicy().allowNsfwSharing;
         civitaiInfo = await this.fetchCivitaiMetadataByHash(sha256, allowNsfw);
@@ -411,8 +585,9 @@ export class ModelMetadataExtractor {
       }
     }
 
-    // 6. If creator or tags are still missing, or if model is an LLM or has HF repo, check Hugging Face
-    if (!creator || tags.length === 0 || isLlm || hfRepoId) {
+    // 6. If creator or tags are still missing, or if model is an LLM without repo info, check Hugging Face
+    const needsHfLookup = !creator || tags.length === 0 || (!hfRepoId && isLlm);
+    if (needsHfLookup) {
       try {
         const hfQuery = hfRepoId || path.parse(fileName).name;
         const hfInfo = await this.fetchHuggingFaceMetadata(hfQuery);
@@ -434,12 +609,40 @@ export class ModelMetadataExtractor {
       }
     }
 
-    // 7. Fallback: Format clean title from filename if title still empty
+    // 7. Inspect preview image for embedded AI generation workflow (PNG tEXt/iTXt, ComfyUI, WebUI)
+    let hasWorkflow = false;
+    let workflowType: string | undefined;
+
+    if (previewFilePath && fs.existsSync(previewFilePath)) {
+      try {
+        const previewStat = fs.statSync(previewFilePath);
+        const headerBuf = Buffer.alloc(Math.min(previewStat.size, 65536));
+        const fd = fs.openSync(previewFilePath, 'r');
+        fs.readSync(fd, headerBuf, 0, headerBuf.length, 0);
+        fs.closeSync(fd);
+
+        const workflowData = inspectImageWorkflowMetadata(headerBuf);
+        if (workflowData.hasWorkflow) {
+          hasWorkflow = true;
+          workflowType = workflowData.workflowType;
+          if (workflowData.prompt && !description) {
+            description = sanitizeAndDecodeHtml(workflowData.prompt);
+          }
+          if (workflowData.loraTriggers && workflowData.loraTriggers.length > 0) {
+            tags = Array.from(new Set([...tags, ...workflowData.loraTriggers.map((t) => sanitizeAndDecodeHtml(t))]));
+          }
+        }
+      } catch {
+        // Ignore preview inspection errors
+      }
+    }
+
+    // 8. Fallback: Format clean title from filename if title still empty
     if (!title) {
       title = this.formatTitleFromFileName(fileName);
     }
 
-    // 8. Auto-synchronize and write-back newly enriched metadata to RenegadeCMM SQLite database
+    // 9. Auto-synchronize and write-back newly enriched metadata to RenegadeCMM SQLite database
     try {
       await cmmDbBridge.updateModelMetadata({
         filePath: resolvedPath,
@@ -467,6 +670,8 @@ export class ModelMetadataExtractor {
       fileName,
       fileSizeBytes: stat.size,
       previewFilePath,
+      hasWorkflow,
+      workflowType,
       title: title || this.formatTitleFromFileName(fileName),
       version: version || '1.0.0',
       modelType: modelType || (isLlm ? 'LLM' : 'Checkpoint'),
@@ -736,21 +941,28 @@ export class ModelMetadataExtractor {
    */
   async downloadAndCachePreview(imageUrl: string, hash: string): Promise<string | undefined> {
     try {
+      if (!imageUrl || typeof imageUrl !== 'string') return undefined;
+      const parsedUrl = new URL(imageUrl);
+      if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') return undefined;
+
+      const cleanHash = (hash || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 32);
+      if (!cleanHash || cleanHash.length < 8) return undefined;
+
       const previewDir = path.join(os.homedir(), '.renegadeswarm', 'previews');
       if (!fs.existsSync(previewDir)) {
         fs.mkdirSync(previewDir, { recursive: true });
       }
 
-      const localPath = path.join(previewDir, `${hash.slice(0, 16)}.jpg`);
+      const localPath = path.join(previewDir, `${cleanHash.slice(0, 16)}.jpg`);
       if (fs.existsSync(localPath) && fs.statSync(localPath).size > 200) {
         return localPath;
       }
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(imageUrl, {
+      const res = await fetch(parsedUrl.toString(), {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.1.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.2.0' },
       });
       clearTimeout(timeoutId);
 

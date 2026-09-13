@@ -32,6 +32,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   RotateCcw,
+  Zap,
 } from 'lucide-react';
 import { CreateSwarmPackageRequest } from '../../shared/ipcContracts';
 import { SwarmManifest } from '../../protocol/types';
@@ -60,6 +61,7 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
   const [modelFileName, setModelFileName] = useState('');
   const [modelFileSize, setModelFileSize] = useState<number | null>(null);
   const [previewFilePath, setPreviewFilePath] = useState('');
+  const [workflowInfo, setWorkflowInfo] = useState<{ hasWorkflow: boolean; workflowType?: string } | null>(null);
   const [title, setTitle] = useState('');
   const [version, setVersion] = useState('1.0.0');
   const [modelType, setModelType] = useState('Checkpoint');
@@ -172,6 +174,10 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
                 sourceText = 'Auto-populated from Safetensors header & synced to CMM database';
               }
 
+              if (m.hasWorkflow) {
+                setWorkflowInfo({ hasWorkflow: true, workflowType: m.workflowType });
+              }
+
               applyAndLockVerifiedMetadata(
                 {
                   title: m.title || initTitle,
@@ -230,6 +236,10 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
           sourceText = 'Auto-populated from Safetensors header & synced to CMM database';
         }
 
+        if (metadata.hasWorkflow) {
+          setWorkflowInfo({ hasWorkflow: true, workflowType: metadata.workflowType });
+        }
+
         applyAndLockVerifiedMetadata(
           {
             title: metadata.title || '',
@@ -261,14 +271,16 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
 
   const handleBrowsePreviewFile = async () => {
     if (!window.renegadeSwarm) return;
-    if (isMetadataLocked) {
-      setShowUnlockModal(true);
-      return;
-    }
     try {
       const res = await window.renegadeSwarm.browsePreviewFile();
       if (res.success && res.data?.filePath) {
         setPreviewFilePath(res.data.filePath);
+        if (res.data.workflowMeta?.hasWorkflow) {
+          setWorkflowInfo({ hasWorkflow: true, workflowType: res.data.workflowMeta.workflowType });
+          if (res.data.workflowMeta.prompt && !description) {
+            setDescription(res.data.workflowMeta.prompt);
+          }
+        }
       }
     } catch {
       // User canceled
@@ -475,6 +487,8 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
               setModelFilePath('');
               setModelFileName('');
               setModelFileSize(null);
+              setPreviewFilePath('');
+              setWorkflowInfo(null);
               setTitle('');
               setMetadataSource(null);
               setIsMetadataLocked(false);
@@ -797,12 +811,23 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
 
           {/* Preview Image Picker */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <label style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <ImageIcon size={13} color="#a855f7" />
                 <span>Preview Image or Video (Optional)</span>
               </span>
-              {isMetadataLocked && <Lock size={11} color="var(--text-muted)" />}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {workflowInfo?.hasWorkflow && (
+                  <span style={{ fontSize: '10px', color: '#a855f7', background: 'rgba(168, 85, 247, 0.12)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(168, 85, 247, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <Zap size={10} color="#a855f7" />
+                    <span>Workflow Included ({workflowInfo.workflowType || 'Prompt Data'})</span>
+                  </span>
+                )}
+                <span style={{ fontSize: '10px', color: '#10b981', background: 'rgba(16, 185, 129, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(16, 185, 129, 0.25)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <span>✓</span>
+                  <span>Unlocked (No WoT score impact)</span>
+                </span>
+              </div>
             </label>
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
@@ -811,8 +836,7 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
                 value={previewFilePath}
                 readOnly
                 className="mono"
-                style={{ flex: 1, background: 'var(--bg-surface)', cursor: isMetadataLocked ? 'not-allowed' : 'default' }}
-                onClick={handleLockedFieldClick}
+                style={{ flex: 1, background: 'var(--bg-surface)', cursor: 'default' }}
               />
               <button
                 type="button"
@@ -822,10 +846,13 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
               >
                 Browse Preview...
               </button>
-              {previewFilePath && !isMetadataLocked && (
+              {previewFilePath && (
                 <button
                   type="button"
-                  onClick={() => setPreviewFilePath('')}
+                  onClick={() => {
+                    setPreviewFilePath('');
+                    setWorkflowInfo(null);
+                  }}
                   className="btn-secondary"
                   style={{ color: '#f43f5e' }}
                   title="Remove Preview"

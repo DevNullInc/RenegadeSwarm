@@ -25,6 +25,7 @@ import { pieceStreamEngine } from './pieceStreamEngine';
 import { contentInspector } from './contentInspector';
 import { cmmFolderRouter } from '../cmm/cmmFolderRouter';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
+import { preDownloadVerifier } from './preDownloadVerifier';
 
 export interface SyncQueueItem {
   fileId: string;
@@ -216,6 +217,13 @@ export class SyncQueueManager extends EventEmitter {
 
       // Atomic rename/move to destination
       fs.renameSync(item.quarantineFilePath, item.finalDestinationPath);
+
+      // Save companion files (.sha256, .civitai.info / .huggingface.info / .info, preview image)
+      await preDownloadVerifier.saveCompanionAssets({
+        targetModelPath: item.finalDestinationPath,
+        sha256: item.manifest.hashes.sha256,
+        manifest: item.manifest,
+      });
 
       // Register with RenegadeCMM database bridge atomically
       await cmmDbBridge.registerCompletedDownload(item.manifest, item.finalDestinationPath);

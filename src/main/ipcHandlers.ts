@@ -27,6 +27,7 @@ import {
   KeyringEntrySchema,
   UserIdentitySchema,
   OpenExternalUrlRequestSchema,
+  PreDownloadVerifyRequestSchema,
   IpcResponse,
 } from '../shared/ipcContracts';
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
@@ -38,19 +39,29 @@ import { keyringManager } from './engine/keyringManager';
 import { cmmDbBridge } from './cmm/cmmDbBridge';
 import { cmmFolderRouter } from './cmm/cmmFolderRouter';
 import { modelMetadataExtractor } from './metadata/modelMetadataExtractor';
+import { contentInspector } from './engine/contentInspector';
+import { preDownloadVerifier } from './engine/preDownloadVerifier';
 
 export function registerIpcHandlers() {
+  // Pre-Download Verification Handshake
+  ipcMain.handle('swarm:verifyPreDownload', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const validated = PreDownloadVerifyRequestSchema.parse(raw || {});
+      const result = await preDownloadVerifier.verifyPreDownload(validated);
+      return { success: true, data: result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
   // File Dialogs & Metadata Extraction
   ipcMain.handle('dialog:openModelFile', async (): Promise<IpcResponse> => {
     try {
       const result = await dialog.showOpenDialog({
-        title: 'Select AI Model File to Package & Seed',
-        buttonLabel: 'Select Model File',
+        title: 'Select AI Model File',
+        buttonLabel: 'Select Model',
         properties: ['openFile'],
         filters: [
           { name: 'AI Models (*.safetensors, *.gguf, *.bin, *.pt, *.onnx)', extensions: ['safetensors', 'gguf', 'bin', 'pt', 'pth', 'onnx', 'ckpt'] },
-          { name: 'Safetensors Models (*.safetensors)', extensions: ['safetensors'] },
-          { name: 'GGUF Models (*.gguf)', extensions: ['gguf'] },
           { name: 'All Files (*.*)', extensions: ['*'] },
         ],
       });
@@ -83,7 +94,9 @@ export function registerIpcHandlers() {
         return { success: false, error: 'File selection canceled' };
       }
 
-      return { success: true, data: { filePath: result.filePaths[0] } };
+      const filePath = result.filePaths[0];
+      const inspection = await contentInspector.inspectFile(filePath);
+      return { success: true, data: { filePath, workflowMeta: inspection.metadata } };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

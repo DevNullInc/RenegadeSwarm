@@ -58,7 +58,7 @@ declare global {
       updateSharingPolicy: (settings: any) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
       toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<{ success: boolean; data?: any; error?: string }>;
       browseModelFile: () => Promise<{ success: boolean; data?: { filePath: string; metadata: any }; error?: string }>;
-      browsePreviewFile: () => Promise<{ success: boolean; data?: { filePath: string }; error?: string }>;
+      browsePreviewFile: () => Promise<{ success: boolean; data?: { filePath: string; workflowMeta?: any }; error?: string }>;
       browseDirectory: (options?: { title?: string; defaultPath?: string }) => Promise<{ success: boolean; data?: { folderPath: string }; error?: string }>;
       browseSqliteFile: () => Promise<{ success: boolean; data?: { filePath: string }; error?: string }>;
       getModelFolders: () => Promise<{ success: boolean; data?: { folders: import('../shared/ipcContracts').ModelFolderEntry[]; defaultFolder: string; rootPath: string }; error?: string }>;
@@ -77,6 +77,7 @@ declare global {
       getKeyringLockoutStatus: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').LockoutStatus; error?: string }>;
       generateKeyPair: () => Promise<{ success: boolean; data?: { publicKeyHex: string; privateKeyHex: string }; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+      verifyPreDownload: (req: import('../shared/ipcContracts').PreDownloadVerifyRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PreDownloadVerificationResult; error?: string }>;
     };
   }
 }

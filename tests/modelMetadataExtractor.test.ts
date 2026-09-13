@@ -312,7 +312,83 @@ describe('ModelMetadataExtractor Engine', () => {
     fetchSpy.mockRestore();
   });
 
+  it('should harvest companion .sha256, .civitai.info, and companion images completely offline', async () => {
+    const companionModelPath = path.join(tmpDir, 'CyberRealistic_v50.safetensors');
+    const companionShaPath = path.join(tmpDir, 'CyberRealistic_v50.sha256');
+    const companionInfoPath = path.join(tmpDir, 'CyberRealistic_v50.civitai.info');
+    const companionImgPath = path.join(tmpDir, 'CyberRealistic_v50.preview.png');
+
+    const expectedSha256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+    fs.writeFileSync(companionModelPath, Buffer.alloc(1024));
+    fs.writeFileSync(companionShaPath, expectedSha256, 'utf8');
+    fs.writeFileSync(companionImgPath, Buffer.alloc(200));
+
+    const mockCivitaiInfo = {
+      id: 123456,
+      modelId: 78910,
+      name: 'v5.0',
+      description: '<p>Photorealistic SDXL checkpoint with ultra detail.</p>',
+      trainedWords: ['cyberrealistic', 'photoreal'],
+      baseModel: 'SDXL 1.0',
+      model: {
+        name: 'CyberRealistic',
+        type: 'Checkpoint',
+        creator: { username: 'CyberRealArtist' },
+        tags: [{ name: 'photorealism' }, { name: 'realistic' }],
+      },
+    };
+    fs.writeFileSync(companionInfoPath, JSON.stringify(mockCivitaiInfo, null, 2), 'utf8');
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const meta = await extractor.extractMetadata(companionModelPath);
+
+    expect(meta.sha256).toBe(expectedSha256);
+    expect(meta.title).toBe('CyberRealistic (v5.0)');
+    expect(meta.creator).toBe('CyberRealArtist');
+    expect(meta.civitaiModelId).toBe(78910);
+    expect(meta.civitaiVersionId).toBe(123456);
+    expect(meta.baseModel).toBe('SDXL 1.0');
+    expect(meta.modelType).toBe('Checkpoint');
+    expect(meta.previewFilePath).toBe(companionImgPath);
+    expect(meta.tags).toContain('photorealism');
+    expect(meta.tags).toContain('cyberrealistic');
+    expect(meta.description).toContain('cyberrealistic, photoreal');
+
+    // Verify no network calls were made because companion assets satisfied everything offline
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it('should harvest HuggingFace companion .huggingface.info offline', async () => {
+    const hfModelPath = path.join(tmpDir, 'Qwen2.5-Coder-32B.gguf');
+    const hfInfoPath = path.join(tmpDir, 'Qwen2.5-Coder-32B.huggingface.info');
+
+    fs.writeFileSync(hfModelPath, Buffer.alloc(1024));
+    const mockHfInfo = {
+      id: 'Qwen/Qwen2.5-Coder-32B-Instruct-GGUF',
+      author: 'Qwen',
+      modelName: 'Qwen2.5-Coder-32B-Instruct',
+      pipeline_tag: 'text-generation',
+      tags: ['code', 'qwen', 'llm'],
+      cardData: {
+        base_model: 'Qwen/Qwen2.5-Coder-32B',
+      },
+      description: 'Qwen 2.5 Coder 32B model weights',
+    };
+    fs.writeFileSync(hfInfoPath, JSON.stringify(mockHfInfo, null, 2), 'utf8');
+
+    const meta = await extractor.extractMetadata(hfModelPath);
+    expect(meta.creator).toBe('Qwen');
+    expect(meta.hfRepoId).toBe('Qwen/Qwen2.5-Coder-32B-Instruct-GGUF');
+    expect(meta.modelType).toBe('LLM');
+    expect(meta.isLlm).toBe(true);
+    expect(meta.baseModel).toBe('Qwen/Qwen2.5-Coder-32B');
+    expect(meta.tags).toContain('code');
+  });
+
   it('should reject non-existent file paths with descriptive error', async () => {
     await expect(extractor.extractMetadata('/invalid/non_existent_file.safetensors')).rejects.toThrow('File not found');
   });
 });
+

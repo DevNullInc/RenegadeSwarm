@@ -61,6 +61,7 @@ export interface RenegadeSwarmApi {
   getKeyringLockoutStatus: () => Promise<any>;
   generateKeyPair: () => Promise<any>;
   openExternal: (url: string) => Promise<any>;
+  verifyPreDownload: (req: any) => Promise<any>;
 }
 
 const api: RenegadeSwarmApi = {
@@ -99,6 +100,7 @@ const api: RenegadeSwarmApi = {
   getKeyringLockoutStatus: () => ipcRenderer.invoke('keyring:getLockoutStatus'),
   generateKeyPair: () => ipcRenderer.invoke('crypto:generateKeyPair'),
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', { url }),
+  verifyPreDownload: (req) => ipcRenderer.invoke('swarm:verifyPreDownload', req),
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);

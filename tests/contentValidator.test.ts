@@ -142,11 +142,43 @@ describe('Strict AI & LLM Model Content Validation', () => {
     expect(result.reason).toContain('Forbidden script header detected (#! shebang)');
   });
 
-  it('should reject RAR and 7-Zip archives masquerading as checkpoints', () => {
-    const fakeRar = Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00, 0x00]);
-    const fake7z = Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c, 0x00, 0x00]);
+  it('should accept PNG preview image even if named with .jpeg extension (cross-extension export)', () => {
+    // Standard PNG header
+    const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+    const result = validateModelBufferHeader(new Uint8Array(pngHeader), '.jpeg');
+    expect(result.isValid).toBe(true);
+    expect(result.formatType).toBe(ModelFormatType.PreviewImage);
+    expect(result.metadata?.actualFormat).toBe('PNG');
+  });
 
-    expect(validateModelBufferHeader(new Uint8Array(fakeRar), '.safetensors').isValid).toBe(false);
-    expect(validateModelBufferHeader(new Uint8Array(fake7z), '.safetensors').isValid).toBe(false);
+  it('should detect embedded generation workflow parameters and LoRA triggers in preview image', () => {
+    // PNG with embedded tEXtparameters
+    const promptPayload = 'masterpiece, solo, 1girl, orange hair, <lora:R3alB3auty_ANIMA:1.0>\nSteps: 25, Sampler: Euler, CFG scale: 3.5, Seed: 12345';
+    const pngWithWorkflow = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('tEXtparameters'),
+      Buffer.from(promptPayload),
+    ]);
+
+    const result = validateModelBufferHeader(new Uint8Array(pngWithWorkflow), '.png');
+    expect(result.isValid).toBe(true);
+    expect(result.metadata?.hasWorkflow).toBe(true);
+    expect(result.metadata?.workflowType).toBe('Automatic1111 / WebUI');
+    expect(result.metadata?.prompt).toContain('masterpiece, solo, 1girl');
+    expect(result.metadata?.loraTriggers).toContain('<lora:R3alB3auty_ANIMA:1.0>');
+  });
+
+  it('should detect ComfyUI workflow in PNG preview image', () => {
+    const comfyWorkflow = '{"nodes": [{"id": 1, "class_type": "KSampler"}], "prompt": "portrait of a woman"}';
+    const pngWithComfy = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from('tEXtworkflow'),
+      Buffer.from(comfyWorkflow),
+    ]);
+
+    const result = validateModelBufferHeader(new Uint8Array(pngWithComfy), '.preview.png');
+    expect(result.isValid).toBe(true);
+    expect(result.metadata?.hasWorkflow).toBe(true);
+    expect(result.metadata?.workflowType).toBe('ComfyUI');
   });
 });

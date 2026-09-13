@@ -92,8 +92,11 @@ export function validateModelBufferHeader(
     };
   }
 
-  // Check for MP4 video ('ftyp' box at index 4)
+  const ext = declaredExtension.toLowerCase().split('.').pop() || '';
+  const isPreviewMediaExt = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'mp4', 'webm'].includes(ext);
+
   if (
+    !isPreviewMediaExt &&
     buffer.length >= 8 &&
     buffer[4] === 0x66 &&
     buffer[5] === 0x74 &&
@@ -106,8 +109,6 @@ export function validateModelBufferHeader(
       reason: 'Forbidden media signature detected (MP4 ftyp container)',
     };
   }
-
-  const ext = declaredExtension.toLowerCase().replace(/^\./, '');
 
   // 2. Format-specific deep verification
   switch (ext) {
@@ -125,14 +126,14 @@ export function validateModelBufferHeader(
       return validateConfigText(buffer);
 
     case 'png':
-      return validatePngHeader(buffer);
-
     case 'jpg':
     case 'jpeg':
-      return validateJpegHeader(buffer);
-
     case 'webp':
-      return validateWebpHeader(buffer);
+    case 'gif':
+    case 'avif':
+    case 'mp4':
+    case 'webm':
+      return validatePreviewMediaHeader(buffer, ext);
 
     case 'bin':
     case 'pt':
@@ -341,43 +342,88 @@ function validateConfigText(buffer: Uint8Array): ContentValidationResult {
 }
 
 /**
- * Validates PNG image header: 89 50 4E 47 0D 0A 1A 0A
+ * Inspects image/media buffers for embedded AI generation workflow parameters (PNG tEXt/iTXt, ComfyUI, A1111, LoRA syntax).
  */
-function validatePngHeader(buffer: Uint8Array): ContentValidationResult {
-  const pngSig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  for (let i = 0; i < pngSig.length; i++) {
-    if (buffer[i] !== pngSig[i]) {
-      return { isValid: false, formatType: ModelFormatType.PreviewImage, reason: 'Invalid PNG header signature' };
+export function inspectImageWorkflowMetadata(buffer: Uint8Array): {
+  hasWorkflow: boolean;
+  workflowType?: string;
+  prompt?: string;
+  loraTriggers?: string[];
+} {
+  try {
+    const textSlice = new TextDecoder('latin1').decode(buffer.subarray(0, Math.min(buffer.length, 65536)));
+
+    let hasWorkflow = false;
+    let workflowType: string | undefined;
+    let prompt: string | undefined;
+
+    if (textSlice.includes('tEXtworkflow') || textSlice.includes('"class_type"') || textSlice.includes('"nodes"')) {
+      hasWorkflow = true;
+      workflowType = 'ComfyUI';
+    } else if (textSlice.includes('tEXtparameters') || textSlice.includes('parameters\x00') || textSlice.includes('Steps:') || textSlice.includes('Sampler:')) {
+      hasWorkflow = true;
+      workflowType = 'Automatic1111 / WebUI';
+    } else if (textSlice.includes('sd-metadata') || textSlice.includes('InvokeAI') || textSlice.includes('Fooocus')) {
+      hasWorkflow = true;
+      workflowType = 'AI Generation Workflow';
     }
+
+    // Extract prompt text if parameters/workflow found
+    if (hasWorkflow) {
+      if (textSlice.includes('tEXtparameters')) {
+        const paramIdx = textSlice.indexOf('tEXtparameters');
+        const after = textSlice.slice(paramIdx + 14, paramIdx + 2000);
+        const stepsIdx = after.indexOf('Steps:');
+        prompt = (stepsIdx !== -1 ? after.slice(0, stepsIdx) : after.slice(0, 500)).trim();
+      } else if (textSlice.includes('parameters\x00')) {
+        const paramIdx = textSlice.indexOf('parameters\x00');
+        const after = textSlice.slice(paramIdx + 11, paramIdx + 2000);
+        const stepsIdx = after.indexOf('Steps:');
+        prompt = (stepsIdx !== -1 ? after.slice(0, stepsIdx) : after.slice(0, 500)).trim();
+      }
+    }
+
+    // Extract any LoRA trigger syntax (<lora:Name:Weight>)
+    const loraMatches = textSlice.match(/<lora:[^>]+>/g);
+    const loraTriggers = loraMatches ? Array.from(new Set(loraMatches)) : undefined;
+    if (loraTriggers && loraTriggers.length > 0) {
+      hasWorkflow = true;
+      if (!workflowType) workflowType = 'LoRA Prompt Data';
+    }
+
+    return { hasWorkflow, workflowType, prompt, loraTriggers };
+  } catch {
+    return { hasWorkflow: false };
   }
-  return { isValid: true, formatType: ModelFormatType.PreviewImage };
 }
 
 /**
- * Validates JPEG image header: FF D8 FF
+ * Validates Preview Image or Video media (PNG, JPEG, WebP, GIF, AVIF, MP4, WebM).
+ * Adaptive signature detection: Handles cross-extension exports (e.g. PNG named .jpeg or vice versa).
  */
-function validateJpegHeader(buffer: Uint8Array): ContentValidationResult {
-  if (buffer[0] !== 0xff || buffer[1] !== 0xd8 || buffer[2] !== 0xff) {
-    return { isValid: false, formatType: ModelFormatType.PreviewImage, reason: 'Invalid JPEG header signature' };
-  }
-  return { isValid: true, formatType: ModelFormatType.PreviewImage };
-}
+export function validatePreviewMediaHeader(buffer: Uint8Array, _declaredExtension?: string): ContentValidationResult {
+  const isPng = buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47 && buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a;
+  const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isWebp = buffer.length >= 12 && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50;
+  const isGif = buffer.length >= 6 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38;
+  const isMp4OrAvif = buffer.length >= 8 && buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70;
+  const isWebm = buffer.length >= 4 && buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3;
 
-/**
- * Validates WebP image header: 'RIFF' .... 'WEBP'
- */
-function validateWebpHeader(buffer: Uint8Array): ContentValidationResult {
-  if (
-    buffer[0] !== 0x52 ||
-    buffer[1] !== 0x49 ||
-    buffer[2] !== 0x46 ||
-    buffer[3] !== 0x46 ||
-    buffer[8] !== 0x57 ||
-    buffer[9] !== 0x45 ||
-    buffer[10] !== 0x42 ||
-    buffer[11] !== 0x50
-  ) {
-    return { isValid: false, formatType: ModelFormatType.PreviewImage, reason: 'Invalid WebP header signature' };
+  if (isPng || isJpeg || isWebp || isGif || isMp4OrAvif || isWebm) {
+    const workflowMeta = inspectImageWorkflowMetadata(buffer);
+    return {
+      isValid: true,
+      formatType: ModelFormatType.PreviewImage,
+      metadata: {
+        actualFormat: isPng ? 'PNG' : isJpeg ? 'JPEG' : isWebp ? 'WebP' : isGif ? 'GIF' : isWebm ? 'WebM' : 'MP4/AVIF',
+        ...workflowMeta,
+      },
+    };
   }
-  return { isValid: true, formatType: ModelFormatType.PreviewImage };
+
+  return {
+    isValid: false,
+    formatType: ModelFormatType.PreviewImage,
+    reason: `Invalid preview media signature: Expected valid PNG, JPEG, WebP, GIF, or Video preview container, but received incompatible binary payload.`,
+  };
 }

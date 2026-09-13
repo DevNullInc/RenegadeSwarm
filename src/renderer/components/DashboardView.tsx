@@ -29,9 +29,14 @@ import {
   HardDrive,
   CheckCircle2,
   Folder,
+  ShieldCheck,
+  AlertTriangle,
+  FileCheck,
+  RefreshCw,
+  Lock,
 } from 'lucide-react';
 import { SwarmTorrentStatus } from '../../protocol/types';
-import { ModelFolderEntry } from '../../shared/ipcContracts';
+import { ModelFolderEntry, PreDownloadVerificationResult } from '../../shared/ipcContracts';
 
 interface DashboardViewProps {
   torrents: SwarmTorrentStatus[];
@@ -54,6 +59,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [availableFolders, setAvailableFolders] = useState<ModelFolderEntry[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>('');
 
+  // Pre-download verification state
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<PreDownloadVerificationResult | null>(null);
+
   const loadFolders = async () => {
     if (window.renegadeSwarm?.getModelFolders) {
       try {
@@ -73,6 +82,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   useEffect(() => {
     loadFolders();
   }, [showAddModal]);
+
+  // Live pre-download verification handshake on magnet input change
+  useEffect(() => {
+    if (!magnetInput.trim() || !magnetInput.includes('urn:btih:')) {
+      setVerifyResult(null);
+      setIsVerifying(false);
+      return;
+    }
+
+    let active = true;
+    setIsVerifying(true);
+    const timer = setTimeout(async () => {
+      if (window.renegadeSwarm?.verifyPreDownload) {
+        try {
+          const res = await window.renegadeSwarm.verifyPreDownload({ magnetUri: magnetInput.trim() });
+          if (active && res.success && res.data) {
+            setVerifyResult(res.data);
+          }
+        } catch {
+          if (active) setVerifyResult(null);
+        } finally {
+          if (active) setIsVerifying(false);
+        }
+      } else {
+        if (active) setIsVerifying(false);
+      }
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [magnetInput]);
 
   const handleBrowseCustomDestination = async () => {
     if (!window.renegadeSwarm?.browseDirectory) return;
@@ -350,10 +392,87 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   value={magnetInput}
                   onChange={(e) => setMagnetInput(e.target.value)}
                   placeholder="magnet:?xt=urn:btih:...&dn=FLUX.1-Dev.safetensors"
-                  style={{ width: '100%', height: '80px', resize: 'none', boxSizing: 'border-box' }}
+                  style={{ width: '100%', height: '70px', resize: 'none', boxSizing: 'border-box' }}
                   className="mono"
                   required
                 />
+
+                {/* Pre-Download Live Verification Panel */}
+                {isVerifying && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: 'rgba(168, 85, 247, 0.08)',
+                    border: '1px solid rgba(168, 85, 247, 0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '11px',
+                    color: '#c084fc',
+                  }}>
+                    <RefreshCw size={13} className="spin" />
+                    <span>Verifying reported hash & companion metadata with CivitAI / HuggingFace / WoT...</span>
+                  </div>
+                )}
+
+                {verifyResult && !isVerifying && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '10px 12px',
+                    borderRadius: '8px',
+                    background: verifyResult.canProceed ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: `1px solid ${verifyResult.canProceed ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    fontSize: '11px',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, color: verifyResult.canProceed ? '#34d399' : '#f87171' }}>
+                        {verifyResult.status === 'verified_civitai' && <CheckCircle2 size={14} color="#10b981" />}
+                        {verifyResult.status === 'verified_huggingface' && <FileCheck size={14} color="#06b6d4" />}
+                        {verifyResult.status === 'verified_custom_trusted' && <ShieldCheck size={14} color="#a855f7" />}
+                        {verifyResult.status === 'verified_custom_untrusted' && <AlertTriangle size={14} color="#eab308" />}
+                        {verifyResult.status === 'rejected' && <Lock size={14} color="#ef4444" />}
+                        <span>
+                          {verifyResult.status === 'verified_civitai' && 'CivitAI Registry Verified'}
+                          {verifyResult.status === 'verified_huggingface' && 'Hugging Face Registry Verified'}
+                          {verifyResult.status === 'verified_custom_trusted' && 'Web of Trust Verified Custom Model'}
+                          {verifyResult.status === 'verified_custom_untrusted' && 'Unindexed Custom Model (Quarantine Isolated)'}
+                          {verifyResult.status === 'rejected' && 'Download Prohibited (Blocked Creator)'}
+                          {verifyResult.status === 'mismatch' && 'Signature Tampering Detected'}
+                        </span>
+                      </div>
+                      <span className="badge" style={{ fontSize: '10px', background: 'rgba(255,255,255,0.06)', color: 'var(--text-main)' }}>
+                        Trust: {verifyResult.trustScore}%
+                      </span>
+                    </div>
+
+                    {verifyResult.title && (
+                      <div style={{ color: 'var(--text-main)' }}>
+                        <strong>{verifyResult.title}</strong>
+                        {verifyResult.creator && <span style={{ color: 'var(--text-muted)' }}> by {verifyResult.creator}</span>}
+                        {verifyResult.baseModel && <span style={{ color: '#c084fc' }}> • {verifyResult.baseModel}</span>}
+                        {verifyResult.modelType && <span style={{ color: 'var(--text-secondary)' }}> [{verifyResult.modelType}]</span>}
+                      </div>
+                    )}
+
+                    {verifyResult.sha256 && (
+                      <div className="mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                        SHA256: {verifyResult.sha256.slice(0, 32)}...
+                      </div>
+                    )}
+
+                    {verifyResult.warnings && verifyResult.warnings.length > 0 && (
+                      <div style={{ color: '#fbbf24', fontSize: '10px' }}>
+                        {verifyResult.warnings.map((w, idx) => (
+                          <div key={idx}>⚠️ {w}</div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Download Destination Model Folder Selector */}
@@ -451,6 +570,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="submit"
                   className="btn-primary"
+                  disabled={verifyResult ? !verifyResult.canProceed : false}
+                  style={verifyResult && !verifyResult.canProceed ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                 >
                   Start Swarm Download
                 </button>

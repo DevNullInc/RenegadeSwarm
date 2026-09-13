@@ -67,6 +67,7 @@ describe('Peer Manager & Tit-for-Tat Choking Algorithm (Rule 11)', () => {
     // p2 and p1 are the top 2 download providers and should be unchoked
     expect(p2?.amChoking).toBe(false);
     expect(p1?.amChoking).toBe(false);
+    expect(p3).toBeDefined();
     // p3 might be optimistically unchoked if picked as the 1 optimistic slot, or choked
     expect(p2?.isOptimisticUnchoke).toBe(false);
     expect(p1?.isOptimisticUnchoke).toBe(false);

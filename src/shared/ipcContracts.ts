@@ -108,6 +108,47 @@ export const OpenExternalUrlRequestSchema = z.object({
   }),
 });
 
+export const PreDownloadVerifyRequestSchema = z.object({
+  sha256: z.string().optional(),
+  magnetUri: z.string().optional(),
+  manifestJson: z.string().optional(),
+  infoJson: z.string().optional(),
+  fileName: z.string().optional(),
+  hfRepoId: z.string().optional(),
+  civitaiVersionId: z.number().int().positive().optional(),
+});
+
+export interface PreDownloadVerificationResult {
+  status:
+    | 'verified_civitai'
+    | 'verified_huggingface'
+    | 'verified_custom_trusted'
+    | 'verified_custom_untrusted'
+    | 'unverified'
+    | 'mismatch'
+    | 'rejected';
+  sha256?: string;
+  source: 'civitai' | 'huggingface' | 'custom' | 'unknown';
+  isCustomModel: boolean;
+  title?: string;
+  creator?: string;
+  modelType?: string;
+  baseModel?: string;
+  description?: string;
+  tags?: string[];
+  nsfw?: boolean;
+  previewUrl?: string;
+  civitaiModelId?: number;
+  civitaiVersionId?: number;
+  hfRepoId?: string;
+  creatorPublicKey?: string;
+  trustScore: number; // 0 - 100
+  trustLevel: 'VerifiedCreator' | 'Community' | 'Untrusted' | 'Blocked' | 'Unknown';
+  warnings: string[];
+  canProceed: boolean;
+  reason?: string;
+}
+
 // Response Types
 export interface IpcResponse<T = unknown> {
   success: boolean;
@@ -125,3 +166,5 @@ export type KeyringEntryContract = z.infer<typeof KeyringEntrySchema>;
 export type UserIdentity = z.infer<typeof UserIdentitySchema>;
 export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;
 export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema>;
+export type PreDownloadVerifyRequest = z.infer<typeof PreDownloadVerifyRequestSchema>;
+

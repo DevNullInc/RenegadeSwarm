@@ -19,7 +19,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
-import { KeyringEngine, KeyringEntry, DEFAULT_TRUSTED_ROOTS, TrustLevel } from '../../protocol/keyring';
+import { KeyringEngine, KeyringEntry, TrustLevel } from '../../protocol/keyring';
 import { generateEd25519KeyPair } from '../../protocol/crypto';
 import { UserIdentity, UserIdentitySchema, KeyringEntrySchema, LockoutStatus } from '../../shared/ipcContracts';
 import { encryptSecret, decryptSecret } from './secureStorage';

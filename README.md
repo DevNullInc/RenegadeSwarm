@@ -4,9 +4,10 @@
 
 [![Version: 0.2.0](https://img.shields.io/badge/version-0.2.0-purple.svg)](https://github.com/DevNullInc/RenegadeSwarm/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-90%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-99%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -361,6 +362,21 @@ Contributions are welcome! Please follow these standards:
 ## ⚖️ Usage Compliance
 
 RenegadeSwarm is a neutral distribution protocol. Users are solely and exclusively responsible for complying with local laws regarding data sharing, copyright, and AI model distribution. The content validation filters are technical safeguards against malware and corruption, not legal guarantees. See [**Legal Disclaimer**](docs/LEGAL_DISCLAIMER.md) for full terms and conditions.
+
+---
+
+## 💖 Support & Sponsorship
+
+RenegadeSwarm is an independent, free, and open-source software project built to decentralize AI infrastructure for everyone. If you find RenegadeSwarm and the Renegade ecosystem valuable, consider backing development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-%E2%9D%A4%20DevNullInc-ea4aaa?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/stygianrenegade)
+[![Donate with PayPal](https://img.shields.io/badge/PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/ncp/payment/ME25M8VZRNSEN)
+
+- **GitHub Sponsors**: [github.com/sponsors/DevNullInc](https://github.com/sponsors/DevNullInc)
+- **Ko-fi**: [ko-fi.com/stygianrenegade](https://ko-fi.com/stygianrenegade)
+- **PayPal**: [Direct Donation](https://www.paypal.com/ncp/payment/ME25M8VZRNSEN)
+- Sponsorship directly funds ongoing development of Web of Trust tooling, BEP extensions, bandwidth scheduling algorithms, and ComfyUI integration pipelines.
 
 ---
 
