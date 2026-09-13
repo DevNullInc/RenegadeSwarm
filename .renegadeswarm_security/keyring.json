@@ -6,17 +6,5 @@
     "alias": "TheStygianRenegade / /dev/null Inc",
     "addedAt": 1723456789,
     "notes": "Official RenegadeSwarm creator key"
-  },
-  {
-    "creatorName": "TrustedCustomCreator",
-    "publicKeyHex": "dada1920d9d6ae57429cbb7e8dfff7254ef7aec9d801221c8e6195e63f8a31cc",
-    "trustLevel": "VerifiedCreator",
-    "addedAt": 1789290958332
-  },
-  {
-    "creatorName": "MaliciousActor",
-    "publicKeyHex": "5abacc1bc131f32b3c1b3d82ba357a8ee5c3c907a601f79ab665bc0d2d76f5ba",
-    "trustLevel": "Blocked",
-    "addedAt": 1789290958337
   }
 ]
