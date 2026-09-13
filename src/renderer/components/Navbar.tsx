@@ -19,6 +19,7 @@
 import React from 'react';
 import {
   Activity,
+  Compass,
   UploadCloud,
   Database,
   Sliders,
@@ -29,7 +30,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 
-export type TabId = 'dashboard' | 'seeder' | 'cmm' | 'bandwidth' | 'settings';
+export type TabId = 'dashboard' | 'discovery' | 'seeder' | 'cmm' | 'bandwidth' | 'settings';
 
 interface NavbarProps {
   activeTab: TabId;
@@ -54,6 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const tabs = [
     { id: 'dashboard' as TabId, label: 'Swarm Monitor', icon: Activity },
+    { id: 'discovery' as TabId, label: 'P2P Discovery', icon: Compass },
     { id: 'seeder' as TabId, label: 'Package & Seed', icon: UploadCloud },
     { id: 'cmm' as TabId, label: 'RenegadeCMM Bridge', icon: Database },
     { id: 'bandwidth' as TabId, label: 'Network & Quotas', icon: Sliders },

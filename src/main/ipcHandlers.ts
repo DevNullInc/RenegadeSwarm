@@ -28,6 +28,7 @@ import {
   UserIdentitySchema,
   OpenExternalUrlRequestSchema,
   PreDownloadVerifyRequestSchema,
+  DiscoverySearchRequestSchema,
   IpcResponse,
 } from '../shared/ipcContracts';
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
@@ -41,6 +42,7 @@ import { cmmFolderRouter } from './cmm/cmmFolderRouter';
 import { modelMetadataExtractor } from './metadata/modelMetadataExtractor';
 import { contentInspector } from './engine/contentInspector';
 import { preDownloadVerifier } from './engine/preDownloadVerifier';
+import { discoveryEngine } from './engine/discoveryEngine';
 
 export function registerIpcHandlers() {
   // Pre-Download Verification Handshake
@@ -520,5 +522,31 @@ export function registerIpcHandlers() {
       return { success: false, error: err.message };
     }
   });
+
+  // P2P Model Search & Discovery Handlers (Milestone 1)
+  ipcMain.handle('swarm:searchDiscoveredModels', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { query, modelType, baseModel, verifiedOnly, limit } = DiscoverySearchRequestSchema.parse(raw || {});
+      const results = await discoveryEngine.search(query, {
+        modelType,
+        baseModel,
+        verifiedOnly,
+        limit,
+      });
+      return { success: true, data: results };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:getDiscoveryStats', async (): Promise<IpcResponse> => {
+    try {
+      const stats = discoveryEngine.getStats();
+      return { success: true, data: stats };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }
+
 

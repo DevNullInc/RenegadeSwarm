@@ -118,6 +118,14 @@ export const PreDownloadVerifyRequestSchema = z.object({
   civitaiVersionId: z.number().int().positive().optional(),
 });
 
+export const DiscoverySearchRequestSchema = z.object({
+  query: z.string().default(''),
+  modelType: z.string().optional(),
+  baseModel: z.string().optional(),
+  verifiedOnly: z.boolean().default(false),
+  limit: z.number().int().min(1).max(100).default(50),
+});
+
 export interface PreDownloadVerificationResult {
   status:
     | 'verified_civitai'
@@ -167,4 +175,6 @@ export type UserIdentity = z.infer<typeof UserIdentitySchema>;
 export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;
 export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema>;
 export type PreDownloadVerifyRequest = z.infer<typeof PreDownloadVerifyRequestSchema>;
+export type DiscoverySearchRequest = z.infer<typeof DiscoverySearchRequestSchema>;
+
 

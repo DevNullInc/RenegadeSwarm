@@ -19,6 +19,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar, TabId } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
+import { DiscoveryView } from './components/DiscoveryView';
 import { SeederView } from './components/SeederView';
 import { CmmSyncView } from './components/CmmSyncView';
 import { BandwidthView } from './components/BandwidthView';
@@ -78,6 +79,8 @@ declare global {
       generateKeyPair: () => Promise<{ success: boolean; data?: { publicKeyHex: string; privateKeyHex: string }; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
       verifyPreDownload: (req: import('../shared/ipcContracts').PreDownloadVerifyRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PreDownloadVerificationResult; error?: string }>;
+      searchDiscoveredModels: (req: import('../shared/ipcContracts').DiscoverySearchRequest) => Promise<{ success: boolean; data?: import('../protocol/discoveryTypes').DiscoveredModelWithTrust[]; error?: string }>;
+      getDiscoveryStats: () => Promise<{ success: boolean; data?: { connectedDiscoveryPeers: number; indexedLocalModels: number; cachedDiscoveredModels: number; totalQueriesProcessed: number }; error?: string }>;
     };
   }
 }
@@ -330,6 +333,14 @@ export default function App() {
             onPause={handlePause}
             onResume={handleResume}
             onRemove={handleRemove}
+          />
+        )}
+        {activeTab === 'discovery' && (
+          <DiscoveryView
+            onSelectModelForDownload={(magnetUri) => {
+              handleAddMagnet(magnetUri);
+              setActiveTab('dashboard');
+            }}
           />
         )}
         {activeTab === 'seeder' && (

@@ -11,6 +11,12 @@
 ## [Unreleased] - Active Development Cycle (Target: v0.3.0)
 
 ### Major Features & Architectural Additions
+- **RenegadeSwarm-Exclusive P2P Model Search & Discovery Engine (Milestone 1 Completed)**:
+  - Implemented BEP 10 extension handshake (`renegade_swarm_discovery_v1`) to discover and query models exclusively across live, certified RenegadeSwarm instances while preserving open BitTorrent data downloading.
+  - Implemented `DiscoveryEngine` service (`src/main/engine/discoveryEngine.ts`) with local catalog indexing, peer search broadcast, response deduplication, TTL caching, and Web of Trust trust-scoring.
+  - Added dedicated desktop `DiscoveryView` (`src/renderer/components/DiscoveryView.tsx`) with real-time debounced keyword search, category filter chips (`Checkpoints`, `LoRAs`, `GGUF/LLM`, `VAEs`, `ControlNets`), and live swarm peer count telemetry.
+  - Built Amber Warning Modal safeguard (`AmberWarningModal.tsx`) requiring explicit confirmation and displaying security disclosures before initiating downloads on unverified community models.
+  - Added automated unit and protocol test coverage in `tests/discoveryProtocol.test.ts` and `tests/discoveryEngine.test.ts`.
 - **Pre-Download Verification Handshake (`PreDownloadVerifier`)**:
   - Implemented multi-tier pre-download verification engine (`src/main/engine/preDownloadVerifier.ts`) that validates model hashes, creator metadata, and provenance before initiating heavy weight downloads.
   - Multi-Registry Verification: Validates SHA-256 hashes against CivitAI (`/api/v1/model-versions/by-hash/:hash`) and Hugging Face repository endpoints with request timeouts and user-agent branding.
@@ -51,10 +57,17 @@
   - Resolved static negation warnings, dead variable declarations, and hardened preview cache writes against directory traversal.
 - **Preview Cache Path Traversal Defense (CWE-22)**:
   - Enforced strict hexadecimal hash sanitization (`/^[a-fA-F0-9]+$/`) and URL scheme validation on `downloadAndCachePreview`.
+- **Specialized Multi-File Version Synchronization Utility**:
+  - Implemented standalone Node.js version management CLI (`scripts/bump-version.js`) to synchronize semantic version strings across 10 project files (`package.json`, `package-lock.json`, `README.md`, `SECURITY.md`, `src/protocol/wireProtocol.ts`, `src/main/metadata/modelMetadataExtractor.ts`, `src/main/engine/manifestBuilder.ts`, `src/main/engine/preDownloadVerifier.ts`, `tests/discoveryProtocol.test.ts`, and `docs/MANIFEST_SPEC.md`).
+  - Added CLI dispatching in `rs.ps1` (`.\rs.ps1 bump-version --patch|--minor|--major|<version>`).
+  - Hardened `.gitignore` to keep version management scripts and local release scripts excluded from git commits.
+- **Privacy Policy Update for P2P Search & Discovery**:
+  - Added Section 6 to `docs/PRIVACY_POLICY.md` detailing the decentralized, ephemeral nature of P2P model discovery queries and explicitly clarifying that local unshared file libraries, ComfyUI directories, and private models are never scanned, indexed, or exposed to connected swarm peers.
 - **Unit Test Suite Expansion**:
+  - Added unit and protocol test suites for `discoveryProtocol.test.ts` and `discoveryEngine.test.ts`.
   - Added unit test suites for `preDownloadVerifier.test.ts` (CivitAI, HuggingFace, WoT custom model verification, companion asset generation).
   - Added test coverage for image workflow parameter inspection in `contentValidator.test.ts` and HTML decoding in `modelMetadataExtractor.test.ts`.
-  - Total test suite: **99/99 tests passing across 20 test files**.
+  - Total test suite: **106/106 tests passing across 22 test files** (100% pass rate).
 
 ---
 

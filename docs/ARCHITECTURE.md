@@ -14,6 +14,7 @@
    - [3.3 The BitTorrent Wire Protocol Implementation](#33-the-bittorrent-wire-protocol-implementation)
    - [3.4 Piece Pipelining & Random-Access Streaming](#34-piece-pipelining--random-access-streaming)
    - [3.5 Tit-for-Tat Choking & Optimistic Unchoking](#35-tit-for-tat-choking--optimistic-unchoking)
+   - [3.6 RenegadeSwarm-Exclusive P2P Discovery Protocol](#36-renegadeswarm-exclusive-p2p-discovery-protocol)
 4. [End-to-End Operational Lifecycle Flows](#4-end-to-end-operational-lifecycle-flows)
    - [Flow A: Creating, Signing & Seeding a Model](#flow-a-creating-signing--seeding-a-model)
    - [Flow B: Discovering, Downloading, Verifying & Ingesting](#flow-b-discovering-downloading-verifying--ingesting)
@@ -244,6 +245,51 @@ To saturate high-speed fiber connections and handle 20GB+ models without memory 
 2. **Optimistic Unchoke Rounds (Every 30 seconds)**:
    - Randomly unchokes 1 additional interested peer regardless of current transfer speed.
    - Allows newly joined peers to obtain their first pieces and discovers potentially faster connections.
+
+---
+
+### 3.6 RenegadeSwarm-Exclusive P2P Discovery Protocol
+
+To provide native, decentralized model search without scraping open BitTorrent DHT swarms or admitting non-AI torrent noise, RenegadeSwarm implements an application-specific extension protocol over **BEP 10 Extended Messaging**:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                   BEP 10 EXTENDED DISCOVERY HANDSHAKE                            │
+│  • Extension ID: 1 (renegade_swarm_discovery_v1)                                 │
+│  • Client ID: RenegadeSwarm/0.2.0                                                │
+│  • Capability Flags: discovery, metadata_sync, wot_attestation                   │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                   STRUCTURED DISCOVERY QUERY ENVELOPE                            │
+│  • Query ID (UUIDv4)           • Keyword tokens                                  │
+│  • Category filters (LoRA/GGUF) • Max results (1-50)                              │
+│  • Ed25519 Query Signature     • Timestamp (TTL expiration)                      │
+└────────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │
+                                         ▼
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│                   DISCOVERY ENGINE & WEB OF TRUST SCORING                        │
+│  • Local Catalog Indexing      • Response Deduplication                          │
+│  • Query Broadcast to Peers    • TTL Result Caching                              │
+│  • KeyringManager Evaluation   • Trust Level Badging (Verified/Community/Amber)  │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **BEP 10 Extended Handshake Negotiation (`renegade_swarm_discovery_v1`)**:
+   - During peer connection establishment, nodes exchange extended dictionaries mapping extension names to local message IDs.
+   - Only peers that advertise `renegade_swarm_discovery_v1` participate in discovery query routing, ensuring search queries stay 100% within certified RenegadeSwarm nodes while leaving underlying BitTorrent data piece distribution completely open.
+2. **Signed Discovery Queries & Responses (`src/protocol/discoveryTypes.ts`)**:
+   - Queries contain search terms, optional model category filters (Checkpoints, LoRAs, GGUF/LLM, VAEs, ControlNets), minimum trust score filters, and cryptographic nonces.
+   - Responses return full manifest digests: title, model type, base model, creator name, Ed25519 public key, SHA-256 hash, info_hash, file sizes, and preview asset URLs.
+3. **Discovery Engine Lifecycle (`src/main/engine/discoveryEngine.ts`)**:
+   - **Local Catalog Indexing**: Ingests models from active seeders and local CMM SQLite catalogs.
+   - **Multi-Peer Query Fan-Out**: Broadcasts debounced search queries across all connected extension-capable peers.
+   - **Deduplication & TTL Caching**: Aggregates responses by SHA-256 hash and caches query results with a 5-minute TTL.
+   - **Web of Trust Evaluation**: Automatically scores each search hit against `KeyringManager`, assigning trust scores (100 = Root/Pinned VerifiedCreator, 60 = Community TOFU, 20 = Untrusted, 0 = Blocked).
+4. **Amber Warning System Integration**:
+   - The UI displays an Amber Warning safeguard dialog when users select unverified or community models lacking verified signatures, requiring explicit acknowledgement of security disclosures before triggering downloads.
 
 ---
 

@@ -31,7 +31,7 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet('start', 'run', 'dev', 'stop', 'kill', 'restart', 'status', 'build', 'package', 'dist', 'test', 'clean-assets', 'help')]
+  [ValidateSet('start', 'run', 'dev', 'stop', 'kill', 'restart', 'status', 'build', 'package', 'dist', 'test', 'clean-assets', 'bump-version', 'version', 'help')]
   [string]$Action = 'start',
 
   [int]$Port = 5180,
@@ -529,6 +529,25 @@ function Run-Test {
   }
 }
 
+function Run-BumpVersion {
+  Ensure-NodeInstalled
+  $scriptPath = Join-Path $ProjectRoot 'scripts\bump-version.js'
+  if (-not (Test-Path $scriptPath)) {
+    Write-Host "  [!] Version bump utility '$scriptPath' not found." -ForegroundColor Yellow
+    return
+  }
+  Push-Location $ProjectRoot
+  try {
+    if ($RemainingArgs -and $RemainingArgs.Count -gt 0) {
+      & node $scriptPath @RemainingArgs
+    } else {
+      & node $scriptPath --help
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 function Show-Help {
   Write-Host ''
   Write-Host '  =======================================================' -ForegroundColor Cyan
@@ -545,7 +564,8 @@ function Show-Help {
   Write-Host '    status             Display current application state, ports, PID, and CMM bridge' -ForegroundColor White
   Write-Host '    build              Compile TypeScript main & Vite renderer bundles' -ForegroundColor White
   Write-Host '    package, dist      Build standalone installer / executable via electron-builder' -ForegroundColor White
-  Write-Host '    test               Run the 20 Vitest test suites' -ForegroundColor White
+  Write-Host '    test               Run the 22 Vitest test suites (106 tests)' -ForegroundColor White
+  Write-Host '    bump-version       Synchronize semantic versions across files (--patch, --minor, --major, or <ver>)' -ForegroundColor White
   Write-Host '    clean-assets       Prune stale/orphaned build chunks' -ForegroundColor White
   Write-Host '    help               Display this help text' -ForegroundColor White
   Write-Host ''
@@ -579,6 +599,9 @@ switch ($Action.ToLower()) {
   }
   'test' {
     Run-Test
+  }
+  { $_ -in 'bump-version', 'version' } {
+    Run-BumpVersion
   }
   'clean-assets' {
     Clean-Assets

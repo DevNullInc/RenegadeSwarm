@@ -7,7 +7,7 @@
 [![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-99%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-106%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -98,6 +98,7 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 
 | Feature | Description |
 |---|---|
+| **RenegadeSwarm P2P Model Discovery** | In-app decentralized search engine over BEP 10 extension framing (`renegade_swarm_discovery_v1`). Filters generic BitTorrent noise, aggregates certified peer catalogs, and provides Amber Warning safeguards for unverified models. |
 | **Opt-In Model Sharing & Privacy Policy** | Strict **Opt-In by default**. Local models and completed downloads are never seeded without explicit user permission. Built-in folder and tag blacklists protect private LoRAs and proprietary checkpoints. |
 | **Ed25519 Creator Provenance & Web of Trust** | Immutable public-key signing locks metadata to the BitTorrent `infoHash`. Includes pre-seeded root keys, manual creator pinning, JSON bundle import/export, and machine-bound AES-256-GCM key storage. |
 | **Anti-Abuse Key Lockout Safeguard** | Mandatory 24-hour regeneration cooldown prevents bad actors from cycling identities or evading community blacklists. |
@@ -122,19 +123,21 @@ RenegadeSwarm/
 ├── src/
 │   ├── protocol/               # Pure TypeScript protocol layer (Universal / No Node/Electron APIs)
 │   │   ├── types.ts            # Core protocol interfaces & data models
+│   │   ├── discoveryTypes.ts   # BEP 10 discovery query/response envelopes & schemas
 │   │   ├── validation.ts       # Zod schemas & canonical naming validators
 │   │   ├── crypto.ts           # Ed25519 signing, verification & piece hashing
 │   │   ├── manifest.ts         # Manifest parsing, serialization & magnet URI generation
 │   │   ├── contentValidator.ts # Magic byte inspection, polyglot & executable defense
 │   │   ├── keyring.ts          # Web-of-Trust engine & trusted creator key store
 │   │   ├── sharingPolicy.ts    # Model sharing filter & opt-in permission evaluator
-│   │   └── wireProtocol.ts     # BEP 3 BitTorrent wire protocol framing & bitfields
+│   │   └── wireProtocol.ts     # BEP 3 & BEP 10 wire protocol framing & bitfields
 │   ├── main/                   # Privileged Electron Core
 │   │   ├── index.ts            # App lifecycle, single-instance lock & window management
 │   │   ├── preload.ts          # Capability-scoped Context Bridge
 │   │   ├── ipcHandlers.ts      # Zod-validated IPC handler registry
 │   │   ├── tray.ts             # System tray manager for 24/7 background seeding
 │   │   ├── engine/             # P2P Engine & Storage Layer
+│   │   │   ├── discoveryEngine.ts    # P2P model search aggregator & WoT scorer
 │   │   │   ├── keyringManager.ts     # Keyring persistence & anti-abuse lockout governor
 │   │   │   ├── secureStorage.ts      # Machine-bound AES-256-GCM credential encryption
 │   │   │   ├── swarmEngine.ts        # Swarm coordinator & active transfer manager
@@ -145,6 +148,7 @@ RenegadeSwarm/
 │   │   │   ├── dhtHardening.ts       # BEP 42 Sybil defense & DHT query limiter
 │   │   │   ├── daemonRpcEngine.ts    # JSON-RPC adapter for transmission-daemon / rqbit sidecars
 │   │   │   ├── contentInspector.ts   # Quarantine header reader & extension resolver
+│   │   │   ├── preDownloadVerifier.ts# Multi-registry hash & custom WoT verifier
 │   │   │   └── manifestBuilder.ts    # SHA256 & info-hash builder with Web Seeds
 │   │   ├── metadata/           # Multi-Tier Model Metadata Extractor
 │   │   │   └── modelMetadataExtractor.ts # SafeTensors uint64 header, CMM DB & CivitAI scraper
@@ -157,9 +161,9 @@ RenegadeSwarm/
 │   │   └── swarmProtocol.ts    # Swarm manifest schema, hashes & peer metrics
 │   └── renderer/               # Desktop UI (React, Vite, Dark Cyberpunk Theme)
 │       ├── App.tsx             # Main application layout & live telemetry coordinator
-│       ├── components/         # Swarm Monitor, Seeder, CMM Bridge, Bandwidth, Settings views
+│       ├── components/         # DiscoveryView, Dashboard, Seeder, AmberWarningModal, CMM Bridge, Settings
 │       └── styles/             # Design tokens & glassmorphism styling
-├── tests/                      # Vitest test suite (20 suites, 99 unit & integration tests)
+├── tests/                      # Vitest test suite (22 suites, 106 unit & integration tests)
 ```
 
 ---
@@ -168,7 +172,7 @@ RenegadeSwarm/
 
 To give users and creators 100% peace of mind, RenegadeSwarm undergoes multi-layered automated verification, defensive SecOps audits, and penetration testing across all layers of the codebase:
 
-### 1. Comprehensive Test Suite (99 Passing Tests / 20 Suites)
+### 1. Comprehensive Test Suite (106 Passing Tests / 22 Suites)
 Every commit is validated through automated integration and unit test matrices covering:
 * **Ed25519 Cryptographic Provenance & Keyring Vault** (`tests/ed25519Signing.test.ts`, `tests/keyringManager.test.ts`): Signature generation, machine-bound AES-256-GCM encryption at rest, anti-abuse 24h lockout enforcement, SPKI/PKCS8 DER conversion, and tampering rejection.
 * **Zero-Masquerade Content Validation** (`tests/contentValidator.test.ts`): Verification of SafeTensors, GGUF, ONNX, and PyTorch headers; instant rejection of polyglot ZIPs (`PK\x03\x04`), Windows MZ (`4D 5A`), Linux ELF (`7F 45 4C 46`), Mach-O, Shebang scripts (`#!`), and MP4/MKV video containers.

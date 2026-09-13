@@ -195,3 +195,91 @@ export class Bitfield {
     return this.count() === this.pieceCount;
   }
 }
+
+/**
+ * BEP 10: Extension Protocol Framing & Discovery Messages
+ */
+export const EXTENDED_HANDSHAKE_ID = 0;
+export const RS_DISCOVERY_EXTENSION_ID = 1;
+
+export interface ExtendedHandshakeDict {
+  m: Record<string, number>; // Map of extension name to local extension ID
+  v?: string;                // Client name/version (e.g. 'RenegadeSwarm/0.2.0')
+  renegade_swarm_version?: string;
+  capabilities?: string[];
+  [key: string]: any;
+}
+
+export function serializeExtendedMessage(extendedId: number, payload: Buffer): Buffer {
+  const idBuf = Buffer.alloc(1);
+  idBuf.writeUInt8(extendedId, 0);
+  const combined = Buffer.concat([idBuf, payload]);
+  return serializeMessage(MessageId.Extended, combined);
+}
+
+export function parseExtendedMessage(payload: Buffer): { extendedId: number; data: Buffer } | null {
+  if (payload.length < 1) return null;
+  const extendedId = payload.readUInt8(0);
+  const data = payload.subarray(1);
+  return { extendedId, data };
+}
+
+/**
+ * Serializes BEP 10 Extended Handshake using canonical JSON encoding.
+ */
+export function serializeExtendedHandshake(dict: ExtendedHandshakeDict): Buffer {
+  const jsonStr = JSON.stringify(dict);
+  const jsonBuf = Buffer.from(jsonStr, 'utf8');
+  return serializeExtendedMessage(EXTENDED_HANDSHAKE_ID, jsonBuf);
+}
+
+/**
+ * Parses BEP 10 Extended Handshake JSON buffer.
+ */
+export function parseExtendedHandshake(data: Buffer): ExtendedHandshakeDict | null {
+  try {
+    const jsonStr = data.toString('utf8');
+    const parsed = JSON.parse(jsonStr);
+    if (typeof parsed === 'object' && parsed !== null && typeof parsed.m === 'object') {
+      return parsed as ExtendedHandshakeDict;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export interface DiscoveryEnvelope {
+  type: 'catalog_query' | 'catalog_response' | 'catalog_announce';
+  payload: any;
+  timestamp: number;
+}
+
+/**
+ * Serializes a RenegadeSwarm discovery message payload.
+ */
+export function serializeDiscoveryPayload(type: 'catalog_query' | 'catalog_response' | 'catalog_announce', payload: any): Buffer {
+  const envelope: DiscoveryEnvelope = {
+    type,
+    payload,
+    timestamp: Date.now(),
+  };
+  return Buffer.from(JSON.stringify(envelope), 'utf8');
+}
+
+/**
+ * Parses a RenegadeSwarm discovery message payload.
+ */
+export function parseDiscoveryPayload(data: Buffer): DiscoveryEnvelope | null {
+  try {
+    const jsonStr = data.toString('utf8');
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed.type === 'string' && parsed.payload) {
+      return parsed as DiscoveryEnvelope;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+

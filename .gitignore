@@ -33,3 +33,9 @@ scratch/
 temp/
 *.pid
 .installed
+
+# Version management & maintenance scripts
+scripts/bump-version.js
+scripts/update-version.js
+bump-version.*
+update-version.*

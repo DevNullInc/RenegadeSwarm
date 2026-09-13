@@ -124,7 +124,7 @@ Downloading large models (2GB to 50GB+) before verifying file integrity or creat
 
 | Milestone | Priority | Focus Area | Status | Target Version |
 | :--- | :---: | :--- | :---: | :---: |
-| **Milestone 1** | **P1 (Top)** | RenegadeSwarm-Exclusive P2P Model Search & Discovery | 🔄 In Design | v0.3.0 |
+| **Milestone 1** | **P1 (Top)** | RenegadeSwarm-Exclusive P2P Model Search & Discovery | ✅ Implemented | v0.3.0 |
 | **Milestone 2** | **P2** | Packaging State Hoisting & Background Job Persistence | 🔄 In Design | v0.3.0 |
 | **Milestone 3** | **P3** | Scoped Companion Asset Harvesting & Workflow Discovery | ✅ Implemented | v0.2.0 |
 | **Milestone 4** | **P4** | Strict AI Model Payload Gatekeeping & Magic Byte Rejection | ✅ Implemented | v0.2.0 |

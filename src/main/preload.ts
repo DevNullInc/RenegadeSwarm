@@ -62,6 +62,8 @@ export interface RenegadeSwarmApi {
   generateKeyPair: () => Promise<any>;
   openExternal: (url: string) => Promise<any>;
   verifyPreDownload: (req: any) => Promise<any>;
+  searchDiscoveredModels: (req: any) => Promise<any>;
+  getDiscoveryStats: () => Promise<any>;
 }
 
 const api: RenegadeSwarmApi = {
@@ -101,6 +103,9 @@ const api: RenegadeSwarmApi = {
   generateKeyPair: () => ipcRenderer.invoke('crypto:generateKeyPair'),
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', { url }),
   verifyPreDownload: (req) => ipcRenderer.invoke('swarm:verifyPreDownload', req),
+  searchDiscoveredModels: (req) => ipcRenderer.invoke('swarm:searchDiscoveredModels', req),
+  getDiscoveryStats: () => ipcRenderer.invoke('swarm:getDiscoveryStats'),
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);
+

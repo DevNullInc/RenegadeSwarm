@@ -91,13 +91,33 @@ RenegadeSwarm enforces a strict **Opt-In by Default Sharing Policy** (`src/proto
 
 ---
 
-## 6. Third-Party Online Registry Interactions (CivitAI & Hugging Face)
+## 6. Decentralized P2P Model Search & Discovery (No Unauthorized Local Library Scanning)
+
+RenegadeSwarm includes a built-in decentralized P2P Model Search & Discovery engine (`DiscoveryView`) that communicates directly with connected RenegadeSwarm peer nodes over BitTorrent BEP 10 extension framing (`renegade_swarm_discovery_v1`). To ensure complete transparency and prevent misconceptions regarding local file access:
+
+1. **Zero Unauthorized Scanning of Local Libraries**:
+   - The Discovery Engine **does not** crawl, scan, index, broadcast, or transmit your private file system, local document folders, personal media assets, or unshared ComfyUI model directories across the network.
+   - Only models that you have **explicitly chosen to seed or publish** via the Swarm Seeder (marked with active *Opt-In* sharing permissions) are ever registered in the local peer catalog for query response.
+   - Private checkpoints, in-progress LoRA fine-tunes, unshared weights, and local workflow generations remain 100% private, unexposed, and inaccessible to other swarm peers.
+
+2. **Decentralized, Ephemeral Query Routing**:
+   - When you search for models (e.g. searching for `"flux photorealism"`), your query is routed directly across active RenegadeSwarm peer sockets via binary extension messages.
+   - Query envelopes contain only your user-specified search terms and optional model category filters (`CHECKPOINT`, `LORA`, `GGUF_LLM`, etc.).
+   - Search queries are **ephemeral**: they are evaluated purely in volatile memory by receiving peers and are never logged, stored, profiled, or transmitted to any centralized index or analytics service.
+
+3. **Volatile In-Memory Response Caching**:
+   - Model metadata summaries returned by remote seeders are cached in temporary volatile memory (with a 5-minute TTL) and evaluated against your local Web of Trust keyring.
+   - Cached discovery hits are cleared on application restart and never uploaded to third parties.
+
+---
+
+## 7. Third-Party Online Registry Interactions (CivitAI & Hugging Face)
 
 When packaging models in the Seeder or inspecting local models, RenegadeSwarm provides optional online metadata auto-population:
 
 1. **CivitAI API Lookups**:
    - For diffusion/image models, the application queries `https://civitai.com/api/v1/model-versions/by-hash/:hash` via HTTPS.
-   - **Data Transmitted**: The SHA256 file hash and client User-Agent header (`RenegadeSwarm/0.1.0`).
+   - **Data Transmitted**: The SHA256 file hash and client User-Agent header (`RenegadeSwarm/0.2.0`).
    - **Data Received**: Model title, creator username, tags, base model, description, and preview image URLs.
    - **LLM Exemption**: Large Language Models (`.gguf`, Llama, Mistral, Qwen, DeepSeek) are detected automatically and skip CivitAI lookups.
    - **HTML Sterilization**: All incoming text is sanitized and stripped of executable tags and HTML entities (`sanitizeAndDecodeHtml`) before rendering.
@@ -108,7 +128,7 @@ When packaging models in the Seeder or inspecting local models, RenegadeSwarm pr
 
 ---
 
-## 7. Global Privacy Rights & User Self-Sovereignty
+## 8. Global Privacy Rights & User Self-Sovereignty
 
 Because RenegadeSwarm does not maintain central servers or collect user data, your statutory data rights are **100% self-executable** directly on your local computer:
 
@@ -122,19 +142,19 @@ Because RenegadeSwarm does not maintain central servers or collect user data, yo
 
 ---
 
-## 8. Children's Privacy (COPPA & GDPR-K Compliance)
+## 9. Children's Privacy (COPPA & GDPR-K Compliance)
 
 RenegadeSwarm is intended for machine learning developers, researchers, and AI generative artists. The software is not structured or directed to children under the age of 13 (in the United States under **COPPA**) or under the age of 16 (in the European Union under **GDPR Article 8**). Because no personal data is collected or stored on central servers, no children's personal data is ever knowingly acquired or processed.
 
 ---
 
-## 9. Changes to This Privacy Policy
+## 10. Changes to This Privacy Policy
 
 As an open-source project, any modifications to this Privacy Policy will be published directly to the project repository. Substantive updates will be documented in the [**Development Changelog (`DEV-CHANGELOG.md`)**](../DEV-CHANGELOG.md) and release notes.
 
 ---
 
-## 10. Data Protection & Privacy Contact
+## 11. Data Protection & Privacy Contact
 
 If you have questions regarding this Privacy Policy, data protection practices, or cryptographic privacy controls, please contact the project data protection and legal maintainers:
 
@@ -142,3 +162,4 @@ If you have questions regarding this Privacy Policy, data protection practices, 
 * **Legal & Compliance Matters**: [`legal@renegadeinc.net`](mailto:legal@renegadeinc.net)
 * **Security Vulnerabilities**: [`security@renegadeinc.net`](mailto:security@renegadeinc.net)
 * **Project Repository**: [https://github.com/DevNullInc/RenegadeSwarm](https://github.com/DevNullInc/RenegadeSwarm)
+

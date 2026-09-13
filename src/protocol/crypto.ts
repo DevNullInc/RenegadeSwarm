@@ -131,6 +131,39 @@ export function verifySwarmManifestSignature(manifest: SwarmManifest): boolean {
   }
 }
 
+/**
+ * Signs an arbitrary Buffer using an Ed25519 private key (raw 32-byte hex).
+ */
+export function signEd25519(data: Buffer, privateKeyHex: string): string {
+  const pkcs8Prefix = Buffer.from('302e020100300506032b657004220420', 'hex');
+  const privateKeyDer = Buffer.concat([pkcs8Prefix, Buffer.from(privateKeyHex, 'hex')]);
+  const privateKey = crypto.createPrivateKey({
+    key: privateKeyDer,
+    format: 'der',
+    type: 'pkcs8',
+  });
+  const sig = crypto.sign(null, data, privateKey);
+  return sig.toString('hex');
+}
+
+/**
+ * Verifies an arbitrary Buffer signature using an Ed25519 public key (raw 32-byte hex).
+ */
+export function verifyEd25519Signature(data: Buffer, signatureHex: string, publicKeyHex: string): boolean {
+  try {
+    const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+    const publicKeyDer = Buffer.concat([spkiPrefix, Buffer.from(publicKeyHex, 'hex')]);
+    const publicKey = crypto.createPublicKey({
+      key: publicKeyDer,
+      format: 'der',
+      type: 'spki',
+    });
+    return crypto.verify(null, data, publicKey, Buffer.from(signatureHex, 'hex'));
+  } catch {
+    return false;
+  }
+}
+
 export function verifyPieceSha256(
   pieceBuffer: Uint8Array,
   expectedSha256Hex: string,
