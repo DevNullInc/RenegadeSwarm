@@ -1,4 +1,4 @@
-# RenegadeSwarm
+# RenegadeSwarm - Giving power back to the users. 
 
 > **A decentralized, torrent-style AI model distribution network with automatic ComfyUI organization and seamless RenegadeCMM integration.**
 
