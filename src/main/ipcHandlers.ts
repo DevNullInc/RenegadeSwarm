@@ -16,11 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import {
   AddMagnetRequestSchema,
   TorrentControlRequestSchema,
   CreateSwarmPackageRequestSchema,
+  CancelPackageJobRequestSchema,
   BandwidthSettingsSchema,
   CmmSyncConfigRequestSchema,
   ToggleModelShareRequestSchema,
@@ -34,6 +35,7 @@ import {
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
 import { generateEd25519KeyPair } from '../protocol/crypto';
 import { swarmEngine } from './engine/swarmEngine';
+import { packageJobManager } from './engine/packageJobManager';
 import { bandwidthScheduler } from './engine/bandwidthScheduler';
 import { sharingPolicyManager } from './engine/sharingPolicyManager';
 import { keyringManager } from './engine/keyringManager';
@@ -44,7 +46,19 @@ import { contentInspector } from './engine/contentInspector';
 import { preDownloadVerifier } from './engine/preDownloadVerifier';
 import { discoveryEngine } from './engine/discoveryEngine';
 
+let packageProgressBound = false;
+
 export function registerIpcHandlers() {
+  if (!packageProgressBound) {
+    packageJobManager.on('progress', (progress) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('swarm:packageProgress', progress);
+        }
+      }
+    });
+    packageProgressBound = true;
+  }
   // Pre-Download Verification Handshake
   ipcMain.handle('swarm:verifyPreDownload', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
@@ -210,6 +224,48 @@ export function registerIpcHandlers() {
       const validated = CreateSwarmPackageRequestSchema.parse(raw);
       const manifest = await swarmEngine.createPackageAndSeed(validated);
       return { success: true, data: manifest };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:startPackageJob', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const validated = CreateSwarmPackageRequestSchema.parse(raw);
+      const job = await packageJobManager.startJob(validated);
+      return { success: true, data: job };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:getActivePackagingJob', async (): Promise<IpcResponse> => {
+    try {
+      const job = packageJobManager.getActiveJob();
+      return { success: true, data: job };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:cancelPackagingJob', async (_, raw?: unknown): Promise<IpcResponse> => {
+    try {
+      let jobId: string | undefined;
+      if (raw && typeof raw === 'object') {
+        const validated = CancelPackageJobRequestSchema.partial().parse(raw);
+        jobId = validated.jobId;
+      }
+      const ok = packageJobManager.cancelJob(jobId);
+      return { success: ok };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:clearPackagingJob', async (): Promise<IpcResponse> => {
+    try {
+      const ok = packageJobManager.clearJob();
+      return { success: ok };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

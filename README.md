@@ -7,7 +7,7 @@
 [![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-106%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-111%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -137,6 +137,7 @@ RenegadeSwarm/
 │   │   ├── ipcHandlers.ts      # Zod-validated IPC handler registry
 │   │   ├── tray.ts             # System tray manager for 24/7 background seeding
 │   │   ├── engine/             # P2P Engine & Storage Layer
+│   │   │   ├── packageJobManager.ts  # Persistent background packaging job manager
 │   │   │   ├── discoveryEngine.ts    # P2P model search aggregator & WoT scorer
 │   │   │   ├── keyringManager.ts     # Keyring persistence & anti-abuse lockout governor
 │   │   │   ├── secureStorage.ts      # Machine-bound AES-256-GCM credential encryption

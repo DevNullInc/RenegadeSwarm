@@ -17,6 +17,19 @@
   - Added dedicated desktop `DiscoveryView` (`src/renderer/components/DiscoveryView.tsx`) with real-time debounced keyword search, category filter chips (`Checkpoints`, `LoRAs`, `GGUF/LLM`, `VAEs`, `ControlNets`), and live swarm peer count telemetry.
   - Built Amber Warning Modal safeguard (`AmberWarningModal.tsx`) requiring explicit confirmation and displaying security disclosures before initiating downloads on unverified community models.
   - Added automated unit and protocol test coverage in `tests/discoveryProtocol.test.ts` and `tests/discoveryEngine.test.ts`.
+- **Packaging State Hoisting & Persistent Background Job Manager (Milestone 2 Completed)**:
+  - Implemented `PackageJobManager` service (`src/main/engine/packageJobManager.ts`) to manage long-running model packaging, piece hashing, signature generation, and swarm seeding asynchronously in the background.
+  - Resolved UI tab-switching state wipeouts by maintaining persistent background job state in the Electron main process, allowing users to navigate between views while 50GB+ models are processed.
+  - Added streaming SHA-256 chunk progress callbacks to `ManifestBuilder` (`buildSwarmManifest`), broadcasting real-time percentage and byte progress across the IPC boundary.
+  - Implemented cancellation tokens and cleanup handlers to safely abort active read streams, clean up temporary torrent artifacts, and reset engine state on user cancellation.
+  - Added full IPC lifecycle channels in `src/shared/ipcContracts.ts`, `src/main/ipcHandlers.ts`, and `src/main/preload.ts`:
+    - `swarm:startPackageJob`: Starts asynchronous packaging job and returns initial job metadata.
+    - `swarm:getActivePackagingJob`: Re-hydrates packaging UI state upon `SeederView` mount or tab navigation.
+    - `swarm:cancelPackagingJob`: Aborts active background hashing/packaging jobs.
+    - `swarm:clearPackagingJob`: Clears completed or failed job state.
+    - `swarm:packageProgress`: Push event channel streaming `PackageJobProgress` updates to the renderer.
+  - Integrated `SeederView.tsx` with `PackageJobManager`, including real-time progress indicators, active state restoration, and cancellation controls.
+  - Added comprehensive unit test coverage in `tests/packageJobManager.test.ts`.
 - **Pre-Download Verification Handshake (`PreDownloadVerifier`)**:
   - Implemented multi-tier pre-download verification engine (`src/main/engine/preDownloadVerifier.ts`) that validates model hashes, creator metadata, and provenance before initiating heavy weight downloads.
   - Multi-Registry Verification: Validates SHA-256 hashes against CivitAI (`/api/v1/model-versions/by-hash/:hash`) and Hugging Face repository endpoints with request timeouts and user-agent branding.
@@ -67,7 +80,8 @@
   - Added unit and protocol test suites for `discoveryProtocol.test.ts` and `discoveryEngine.test.ts`.
   - Added unit test suites for `preDownloadVerifier.test.ts` (CivitAI, HuggingFace, WoT custom model verification, companion asset generation).
   - Added test coverage for image workflow parameter inspection in `contentValidator.test.ts` and HTML decoding in `modelMetadataExtractor.test.ts`.
-  - Total test suite: **106/106 tests passing across 22 test files** (100% pass rate).
+  - Added unit test coverage for `PackageJobManager` in `tests/packageJobManager.test.ts` (job state transitions, progress event emission, error handling, cancellation tokens).
+  - Total test suite: **111/111 tests passing across 23 test files** (100% pass rate).
 
 ---
 

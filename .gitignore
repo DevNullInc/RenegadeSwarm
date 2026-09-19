@@ -33,6 +33,9 @@ scratch/
 temp/
 *.pid
 .installed
+.codeql-db/
+*.sarif
+*.csv
 
 # Version management & maintenance scripts
 scripts/bump-version.js

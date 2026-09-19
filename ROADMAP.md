@@ -22,6 +22,7 @@ flowchart TD
     M2 --> M3[3. Scoped Companion Asset Harvesting]
     M3 --> M4[4. Strict AI Model Payload Gatekeeping]
     M4 --> M5[5. Companion Triplet Pre-Flight Handshake]
+    M5 --> M6[6. CMM Upstream Fallback & Instant Swarm Ingestion]
 ```
 
 ---
@@ -120,15 +121,35 @@ Downloading large models (2GB to 50GB+) before verifying file integrity or creat
 
 ---
 
+### Milestone 6: RenegadeCMM Upstream Fallback & Instant Swarm Ingestion (Hugging Face / Civitai)
+
+#### Problem Statement
+When a requested AI model or checkpoint is not present or has zero active seeders on the decentralized RenegadeSwarm mesh, discovery reaches a dead end. Users must manually locate external links, manage external HTTP downloads, verify file hashes, and manually package the model before it can be used locally or shared to the swarm.
+
+#### Architectural Plan
+- **Automated Fallback Trigger via CMM Bridge**:
+  - When RenegadeCMM is loaded and a requested model cannot be resolved within the active RenegadeSwarm peer mesh, CMM automatically triggers an external upstream search.
+  - Queries Civitai (`/api/v1/model-versions/by-hash/:hash`, `/api/v1/models`) and Hugging Face (`/api/models/:model_id`) endpoints to locate authoritative model weights and canonical companion metadata.
+- **Multi-Part Download & Continuous Integrity Verification**:
+  - Initiates segmented chunk downloads using HTTP Range requests into staging `.part` buffers.
+  - Performs streaming SHA-256 checksum calculations and header inspections (SafeTensors metadata validation, magic byte checks) on incoming chunks before writing to disk.
+- **Instant Swarm Seeding Handshake**:
+  - Once download and integrity verification complete, CMM notifies RenegadeSwarm via the `CmmDbBridge` and IPC interface.
+  - Generates the canonical `SwarmManifest` and companion triplet (`.sha256`, `.info`, preview image) locally.
+  - Automatically registers the model in Swarm's piece engine and announces the new infoHash to the RenegadeSwarm P2P mesh—immediately seeding the freshly acquired model to the network without requiring manual packaging steps.
+
+---
+
 ## Milestone Execution & Status Matrix
 
 | Milestone | Priority | Focus Area | Status | Target Version |
 | :--- | :---: | :--- | :---: | :---: |
 | **Milestone 1** | **P1 (Top)** | RenegadeSwarm-Exclusive P2P Model Search & Discovery | ✅ Implemented | v0.3.0 |
-| **Milestone 2** | **P2** | Packaging State Hoisting & Background Job Persistence | 🔄 In Design | v0.3.0 |
+| **Milestone 2** | **P2** | Packaging State Hoisting & Background Job Persistence | ✅ Implemented | v0.3.0 |
 | **Milestone 3** | **P3** | Scoped Companion Asset Harvesting & Workflow Discovery | ✅ Implemented | v0.2.0 |
 | **Milestone 4** | **P4** | Strict AI Model Payload Gatekeeping & Magic Byte Rejection | ✅ Implemented | v0.2.0 |
 | **Milestone 5** | **P5** | Companion Triplet Pre-Flight Handshake & Quarantine Verification | ✅ Implemented | v0.2.0 |
+| **Milestone 6** | **P2** | RenegadeCMM Upstream Fallback (Hugging Face / Civitai) & Instant Seeding | 🔄 In Design | v0.3.0 |
 
 ---
 

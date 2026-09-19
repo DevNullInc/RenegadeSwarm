@@ -30,13 +30,48 @@ import { calculateOptimalPieceLength } from '../../protocol/crypto';
 
 import { contentInspector } from './contentInspector';
 
-export async function computeFileSha256(filePath: string): Promise<string> {
+export async function computeFileSha256(
+  filePath: string,
+  onProgress?: (bytesRead: number, totalBytes: number) => void,
+  abortSignal?: AbortSignal
+): Promise<string> {
   return new Promise((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      return reject(new Error('Operation aborted'));
+    }
+    const stat = fs.statSync(filePath);
+    const totalBytes = stat.size;
+    let bytesRead = 0;
     const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath, { highWaterMark: 8 * 1024 * 1024 });
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
+    const stream = fs.createReadStream(filePath, { highWaterMark: 4 * 1024 * 1024 });
+
+    const onAbort = () => {
+      stream.destroy();
+      reject(new Error('Operation aborted'));
+    };
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    stream.on('data', (chunk) => {
+      bytesRead += chunk.length;
+      hash.update(chunk);
+      if (onProgress) {
+        onProgress(bytesRead, totalBytes);
+      }
+    });
+    stream.on('end', () => {
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+      resolve(hash.digest('hex'));
+    });
+    stream.on('error', (err) => {
+      if (abortSignal) {
+        abortSignal.removeEventListener('abort', onAbort);
+      }
+      reject(err);
+    });
   });
 }
 
@@ -44,9 +79,19 @@ export function computeBitTorrentInfoHash(data: Buffer | string): string {
   return crypto.createHash('sha1').update(data).digest('hex');
 }
 
+export interface BuildSwarmManifestOptions {
+  pieceLength?: number;
+  announceList?: string[][];
+  urlList?: string[];
+  precomputedModelSha256?: string;
+  precomputedPreviewSha256?: string;
+  onProgress?: (bytesRead: number, totalBytes: number) => void;
+  abortSignal?: AbortSignal;
+}
+
 export async function buildSwarmManifest(
   req: CreateSwarmPackageRequest,
-  options?: { pieceLength?: number; announceList?: string[][]; urlList?: string[] }
+  options?: BuildSwarmManifestOptions
 ): Promise<SwarmManifest> {
   if (!fs.existsSync(req.modelFilePath)) {
     throw new Error(`Model file not found: ${req.modelFilePath}`);
@@ -71,7 +116,7 @@ export async function buildSwarmManifest(
   }
 
   const modelStats = fs.statSync(req.modelFilePath);
-  const modelSha256 = await computeFileSha256(req.modelFilePath);
+  const modelSha256 = options?.precomputedModelSha256 || await computeFileSha256(req.modelFilePath, options?.onProgress, options?.abortSignal);
   const modelFileName = path.basename(req.modelFilePath);
 
   const files: SwarmFileEntry[] = [
@@ -88,7 +133,7 @@ export async function buildSwarmManifest(
 
   if (req.previewFilePath && fs.existsSync(req.previewFilePath)) {
     const previewStats = fs.statSync(req.previewFilePath);
-    const previewSha256 = await computeFileSha256(req.previewFilePath);
+    const previewSha256 = options?.precomputedPreviewSha256 || await computeFileSha256(req.previewFilePath, undefined, options?.abortSignal);
     files.push({
       relativePath: path.basename(req.previewFilePath),
       sizeBytes: previewStats.size,

@@ -93,21 +93,7 @@ export class SwarmEngine extends EventEmitter {
     return newTorrent;
   }
 
-  async createPackageAndSeed(req: CreateSwarmPackageRequest): Promise<SwarmManifest> {
-    const shareEvaluation = sharingPolicyManager.evaluatePermission({
-      filePath: req.modelFilePath,
-      fileName: path.basename(req.modelFilePath),
-      modelType: req.modelType,
-      baseModel: req.baseModel,
-      tags: req.tags,
-      isExplicitlyOptedIn: true, // Explicit user package generation
-    });
-
-    if (!shareEvaluation.canShare) {
-      throw new Error(`Sharing Policy Violation: ${shareEvaluation.reason}`);
-    }
-
-    const manifest = await buildSwarmManifest(req);
+  registerSeedingManifest(manifest: SwarmManifest, modelFilePath: string): SwarmTorrentStatus {
     const infoHash = manifest.hashes.infoHash.toLowerCase();
 
     // Mark as explicitly opted-in
@@ -133,12 +119,31 @@ export class SwarmEngine extends EventEmitter {
       seedersConnected: 1,
       ratio: 0.0,
       etaSeconds: null,
-      savePath: req.modelFilePath,
+      savePath: modelFilePath,
       cmmSynced: true,
     };
 
     this.activeSwarms.set(infoHash, seedStatus);
     this.emit('torrent:added', seedStatus);
+    return seedStatus;
+  }
+
+  async createPackageAndSeed(req: CreateSwarmPackageRequest): Promise<SwarmManifest> {
+    const shareEvaluation = sharingPolicyManager.evaluatePermission({
+      filePath: req.modelFilePath,
+      fileName: path.basename(req.modelFilePath),
+      modelType: req.modelType,
+      baseModel: req.baseModel,
+      tags: req.tags,
+      isExplicitlyOptedIn: true, // Explicit user package generation
+    });
+
+    if (!shareEvaluation.canShare) {
+      throw new Error(`Sharing Policy Violation: ${shareEvaluation.reason}`);
+    }
+
+    const manifest = await buildSwarmManifest(req);
+    this.registerSeedingManifest(manifest, req.modelFilePath);
     return manifest;
   }
 

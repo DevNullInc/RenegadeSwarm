@@ -48,6 +48,14 @@ RenegadeSwarm is structured as a layered, modular desktop application composed o
 │    ┌───────────────────────────────────┼───────────────────────────────────┐           │
 │    ▼                                   ▼                                   ▼           │
 │ ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────────────┐ │
+│ │  PackageJobManager   │   │  DiscoveryEngine     │   │ PreDownloadVerifier          │ │
+│ │  • Async background  │   │  • BEP 10 discovery  │   │ • CivitAI / HF validation    │ │
+│ │  • Progress stream   │   │  • P2P search fanout │   │ • Custom WoT signature check │ │
+│ │  • Tab re-hydration  │   │  • WoT trust scoring │   │ • Sibling asset harvester    │ │
+│ └──────────────────────┘   └──────────────────────┘   └──────────────────────────────┘ │
+│    ┌───────────────────────────────────┼───────────────────────────────────┐           │
+│    ▼                                   ▼                                   ▼           │
+│ ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────────────┐ │
 │ │  PeerManager (Mesh)  │   │ PieceStreamEngine    │   │ ContentValidator / Inspector │ │
 │ │  • Choking algorithm │   │ • 16KB sub-blocks    │   │ • Magic-byte validation      │ │
 │ │  • Peer connection   │   │ • Direct disk writes │   │ • Anti-polyglot/executable   │ │
@@ -304,6 +312,7 @@ sequenceDiagram
     participant UI as SeederView (Renderer)
     participant Extractor as ModelMetadataExtractor
     participant CivitAI as CivitAI Public API
+    participant JobMgr as PackageJobManager
     participant Builder as ManifestBuilder
     participant Keyring as KeyringManager (WoT)
     participant Engine as SwarmEngine
@@ -323,13 +332,24 @@ sequenceDiagram
     Extractor-->>UI: Auto-populated title, creator, tags, preview
     Creator->>UI: Click "Create Swarm & Start Seeding"
     
-    UI->>Builder: buildSwarmManifest(req)
+    UI->>JobMgr: swarm:startPackageJob(req)
+    JobMgr-->>UI: Immediate Ack (phase: 'hashing', jobId)
+    
+    JobMgr->>Builder: buildSwarmManifest(req, onProgress, isCancelled)
+    loop Stream SHA-256 Piece Hashing
+        Builder-->>JobMgr: onProgress({ phase: 'hashing', percentage, bytesHashed })
+        JobMgr-->>UI: Push event 'swarm:packageProgress'
+    end
+    
     Builder->>Keyring: Sign payload hash with Ed25519 private key
     Keyring-->>Builder: 64-byte signature
-    Builder-->>Engine: SwarmManifest + InfoHash
+    Builder-->>JobMgr: SwarmManifest + InfoHash
     
+    JobMgr->>Engine: Add Torrent & start seeding
     Engine->>DHT: Announce InfoHash (Pin swarm, listen port 6881)
-    Engine-->>UI: Generated Magnet Link (magnet:?xt=urn:btih:...)
+    
+    JobMgr-->>UI: Push event 'swarm:packageProgress' (phase: 'completed', manifest, magnetUri)
+    Note over UI,JobMgr: If user switches tabs, SeederView queries swarm:getActivePackagingJob to re-hydrate state.
 ```
 
 ---
@@ -456,6 +476,9 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 | Path | Primary Responsibility |
 |---|---|
 | [`src/main/engine/swarmEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/swarmEngine.ts) | Central swarm orchestrator; manages active downloads, seeding, and bandwidth loop. |
+| [`src/main/engine/packageJobManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/packageJobManager.ts) | Persistent background packaging job manager with phase state machine, chunk progress streaming, and tab-switching persistence. |
+| [`src/main/engine/discoveryEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/discoveryEngine.ts) | BEP 10 P2P model discovery aggregator, peer query broadcaster, and Web of Trust scorer. |
+| [`src/main/engine/preDownloadVerifier.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/preDownloadVerifier.ts) | Multi-registry hash verifier (CivitAI, HuggingFace) and custom model Ed25519 signature validator. |
 | [`src/main/engine/peerManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/peerManager.ts) | Manages TCP connections to peers, Bitfields, and Tit-for-Tat choking/unchoking. |
 | [`src/main/engine/pieceStreamEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/pieceStreamEngine.ts) | Random-access file descriptor writes and in-memory piece SHA256 validation. |
 | [`src/main/engine/dhtHardening.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/dhtHardening.ts) | BEP 42 Sybil protection, query rate-limiting (<5KB/s), and pinned swarm tracking. |

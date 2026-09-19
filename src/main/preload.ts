@@ -64,6 +64,11 @@ export interface RenegadeSwarmApi {
   verifyPreDownload: (req: any) => Promise<any>;
   searchDiscoveredModels: (req: any) => Promise<any>;
   getDiscoveryStats: () => Promise<any>;
+  startPackageJob: (req: CreateSwarmPackageRequest) => Promise<any>;
+  getActivePackagingJob: () => Promise<any>;
+  cancelPackagingJob: (jobId?: string) => Promise<any>;
+  clearPackagingJob: () => Promise<any>;
+  onPackageProgress: (callback: (progress: any) => void) => () => void;
 }
 
 const api: RenegadeSwarmApi = {
@@ -73,6 +78,17 @@ const api: RenegadeSwarmApi = {
   resumeTorrent: (req) => ipcRenderer.invoke('swarm:resumeTorrent', req),
   removeTorrent: (req) => ipcRenderer.invoke('swarm:removeTorrent', req),
   createPackage: (req) => ipcRenderer.invoke('swarm:createPackage', req),
+  startPackageJob: (req) => ipcRenderer.invoke('swarm:startPackageJob', req),
+  getActivePackagingJob: () => ipcRenderer.invoke('swarm:getActivePackagingJob'),
+  cancelPackagingJob: (jobId?: string) => ipcRenderer.invoke('swarm:cancelPackagingJob', { jobId }),
+  clearPackagingJob: () => ipcRenderer.invoke('swarm:clearPackagingJob'),
+  onPackageProgress: (callback: (progress: any) => void) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('swarm:packageProgress', handler);
+    return () => {
+      ipcRenderer.removeListener('swarm:packageProgress', handler);
+    };
+  },
   getBandwidthSettings: () => ipcRenderer.invoke('bandwidth:getSettings'),
   updateBandwidthSettings: (settings) => ipcRenderer.invoke('bandwidth:updateSettings', settings),
   getBandwidthStats: () => ipcRenderer.invoke('bandwidth:getStats'),

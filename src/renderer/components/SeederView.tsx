@@ -33,8 +33,9 @@ import {
   ShieldAlert,
   RotateCcw,
   Zap,
+  XCircle,
 } from 'lucide-react';
-import { CreateSwarmPackageRequest } from '../../shared/ipcContracts';
+import { CreateSwarmPackageRequest, PackageJobProgress } from '../../shared/ipcContracts';
 import { SwarmManifest } from '../../protocol/types';
 import { CmmLocalModelRow } from '../../main/cmm/cmmDbBridge';
 
@@ -79,6 +80,7 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const verifiedDataRef = useRef<VerifiedModelDetails | null>(null);
 
+  const [activeJob, setActiveJob] = useState<PackageJobProgress | null>(null);
   const [isPackaging, setIsPackaging] = useState(false);
   const [createdManifest, setCreatedManifest] = useState<SwarmManifest | null>(null);
   const [copied, setCopied] = useState(false);
@@ -131,6 +133,79 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
       setIsMetadataLocked(true);
     }
   };
+
+  useEffect(() => {
+    // 1. Subscribe to real-time packaging progress events from main process
+    let unsubscribe: (() => void) | undefined;
+    if (window.renegadeSwarm?.onPackageProgress) {
+      unsubscribe = window.renegadeSwarm.onPackageProgress((job: PackageJobProgress) => {
+        setActiveJob(job);
+        if (job.phase === 'completed' && job.manifest) {
+          setCreatedManifest(job.manifest);
+          setIsPackaging(false);
+          setError(null);
+        } else if (job.phase === 'error') {
+          setError(job.error || 'Packaging job encountered an error');
+          setIsPackaging(false);
+        } else if (
+          job.phase === 'hashing' ||
+          job.phase === 'validating' ||
+          job.phase === 'generating_manifest' ||
+          job.phase === 'seeding'
+        ) {
+          setIsPackaging(true);
+          setError(null);
+        }
+      });
+    }
+
+    // 2. Fetch current active or latest job state to hoist state across tab unmounts
+    if (window.renegadeSwarm?.getActivePackagingJob) {
+      window.renegadeSwarm
+        .getActivePackagingJob()
+        .then((res) => {
+          if (res.success && res.data) {
+            const job = res.data;
+            setActiveJob(job);
+            if (job.request && !initialModel) {
+              // Restore form inputs from hoisted background job
+              setModelFilePath((prev) => prev || job.request!.modelFilePath);
+              setModelFileName((prev) => prev || (job.request!.modelFilePath.split(/[/\\]/).pop() || ''));
+              if (job.request.previewFilePath) setPreviewFilePath((prev) => prev || job.request!.previewFilePath!);
+              if (job.request.title) setTitle((prev) => prev || job.request!.title);
+              if (job.request.version) setVersion((prev) => prev || job.request!.version);
+              if (job.request.modelType) setModelType((prev) => prev || job.request!.modelType);
+              if (job.request.baseModel) setBaseModel((prev) => prev || job.request!.baseModel!);
+              if (job.request.creator) setCreator((prev) => prev || job.request!.creator!);
+              if (job.request.description) setDescription((prev) => prev || job.request!.description);
+              if (job.request.tags && job.request.tags.length > 0) setTagsInput((prev) => prev || job.request!.tags.join(', '));
+              if (job.request.civitaiModelId) setCivitaiId((prev) => prev || job.request!.civitaiModelId!.toString());
+              if (job.request.hfRepoId) setHfRepoId((prev) => prev || job.request!.hfRepoId!);
+            }
+
+            if (job.phase === 'completed' && job.manifest) {
+              setCreatedManifest(job.manifest);
+              setIsPackaging(false);
+            } else if (job.phase === 'error') {
+              setError(job.error || 'Packaging job failed');
+              setIsPackaging(false);
+            } else if (
+              job.phase === 'hashing' ||
+              job.phase === 'validating' ||
+              job.phase === 'generating_manifest' ||
+              job.phase === 'seeding'
+            ) {
+              setIsPackaging(true);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [initialModel]);
 
   useEffect(() => {
     if (initialModel) {
@@ -315,13 +390,55 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
         hfRepoId: hfRepoId.trim() ? hfRepoId.trim() : undefined,
       };
 
-      const manifest = await onCreatePackage(req);
-      setCreatedManifest(manifest);
+      if (window.renegadeSwarm?.startPackageJob) {
+        const res = await window.renegadeSwarm.startPackageJob(req);
+        if (!res.success) {
+          setError(res.error || 'Failed to start background packaging job');
+          setIsPackaging(false);
+        } else if (res.data) {
+          setActiveJob(res.data);
+        }
+      } else {
+        const manifest = await onCreatePackage(req);
+        setCreatedManifest(manifest);
+        setIsPackaging(false);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to create swarm package');
-    } finally {
       setIsPackaging(false);
     }
+  };
+
+  const handleCancelPackaging = async () => {
+    if (window.renegadeSwarm?.cancelPackagingJob) {
+      try {
+        await window.renegadeSwarm.cancelPackagingJob(activeJob?.jobId);
+        setIsPackaging(false);
+      } catch (err: any) {
+        setError(err.message || 'Failed to cancel packaging job');
+      }
+    }
+  };
+
+  const handlePackageAnother = async () => {
+    if (window.renegadeSwarm?.clearPackagingJob) {
+      try {
+        await window.renegadeSwarm.clearPackagingJob();
+      } catch {}
+    }
+    setActiveJob(null);
+    setCreatedManifest(null);
+    setModelFilePath('');
+    setModelFileName('');
+    setModelFileSize(null);
+    setPreviewFilePath('');
+    setWorkflowInfo(null);
+    setTitle('');
+    setMetadataSource(null);
+    setIsMetadataLocked(false);
+    setHasVerifiedData(false);
+    verifiedDataRef.current = null;
+    setError(null);
   };
 
   const getMagnetLink = () => {
@@ -433,6 +550,68 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
         </div>
       )}
 
+      {/* Background Packaging Active Progress Banner */}
+      {isPackaging && (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '16px 20px',
+            borderRadius: '10px',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(6, 182, 212, 0.08))',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <RefreshCw size={18} className="spin" color="#a855f7" />
+              <div>
+                <strong style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
+                  {activeJob?.phase === 'hashing' && 'Computing Cryptographic SHA-256 Checksum'}
+                  {activeJob?.phase === 'validating' && 'Performing Deep Content Inspection (Magic Bytes)'}
+                  {activeJob?.phase === 'generating_manifest' && 'Building Canonical Swarm Manifest'}
+                  {activeJob?.phase === 'seeding' && 'Registering with Local Piece Engine & Seeding'}
+                  {!activeJob?.phase && 'Preparing Swarm Package...'}
+                </strong>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {activeJob?.currentFile ? `Target: ${activeJob.currentFile}` : (modelFileName || 'Processing model weights...')}
+                  {activeJob?.totalBytes ? ` • ${formatBytes(activeJob.bytesProcessed || 0)} of ${formatBytes(activeJob.totalBytes)}` : ''}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '16px', fontWeight: 700, color: '#a855f7' }}>
+                {activeJob?.percent !== undefined ? `${activeJob.percent}%` : '...'}
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelPackaging}
+                className="btn-secondary"
+                style={{ padding: '6px 12px', fontSize: '12px', color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+              >
+                <XCircle size={14} style={{ marginRight: '4px' }} />
+                Cancel Job
+              </button>
+            </div>
+          </div>
+
+          <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: `${activeJob?.percent || (activeJob?.phase === 'validating' ? 95 : activeJob?.phase === 'generating_manifest' ? 98 : activeJob?.phase === 'seeding' ? 99 : 5)}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg, #a855f7, #06b6d4)',
+                borderRadius: '4px',
+                transition: 'width 0.2s ease',
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {error && (
         <div style={{ padding: '12px 16px', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: '8px', color: '#f43f5e', fontSize: '13px' }}>
           {error}
@@ -482,19 +661,7 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
           </div>
 
           <button
-            onClick={() => {
-              setCreatedManifest(null);
-              setModelFilePath('');
-              setModelFileName('');
-              setModelFileSize(null);
-              setPreviewFilePath('');
-              setWorkflowInfo(null);
-              setTitle('');
-              setMetadataSource(null);
-              setIsMetadataLocked(false);
-              setHasVerifiedData(false);
-              verifiedDataRef.current = null;
-            }}
+            onClick={handlePackageAnother}
             className="btn-secondary"
             style={{ alignSelf: 'flex-start', marginTop: '12px' }}
           >

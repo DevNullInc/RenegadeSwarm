@@ -17,6 +17,7 @@
  */
 
 import { z } from 'zod';
+import { SwarmManifestSchema } from '../protocol/validation';
 
 // 1. Swarm Action Schemas
 export const AddMagnetRequestSchema = z.object({
@@ -44,6 +45,35 @@ export const CreateSwarmPackageRequestSchema = z.object({
   civitaiVersionId: z.number().int().positive().optional(),
   hfRepoId: z.string().optional(),
   hfCommitSha: z.string().optional(),
+});
+
+export const PackageJobPhaseSchema = z.enum([
+  'idle',
+  'hashing',
+  'validating',
+  'generating_manifest',
+  'seeding',
+  'completed',
+  'error',
+]);
+
+export const PackageJobProgressSchema = z.object({
+  jobId: z.string(),
+  phase: PackageJobPhaseSchema,
+  modelFilePath: z.string(),
+  bytesProcessed: z.number().nonnegative(),
+  totalBytes: z.number().nonnegative(),
+  percent: z.number().min(0).max(100),
+  currentFile: z.string().optional(),
+  error: z.string().optional(),
+  manifest: SwarmManifestSchema.optional(),
+  request: CreateSwarmPackageRequestSchema.optional(),
+  createdAt: z.number().int().positive(),
+  completedAt: z.number().int().positive().optional(),
+});
+
+export const CancelPackageJobRequestSchema = z.object({
+  jobId: z.string().min(1),
 });
 
 export const BandwidthSettingsSchema = z.object({
@@ -167,6 +197,9 @@ export interface IpcResponse<T = unknown> {
 export type AddMagnetRequest = z.infer<typeof AddMagnetRequestSchema>;
 export type TorrentControlRequest = z.infer<typeof TorrentControlRequestSchema>;
 export type CreateSwarmPackageRequest = z.infer<typeof CreateSwarmPackageRequestSchema>;
+export type PackageJobPhase = z.infer<typeof PackageJobPhaseSchema>;
+export type PackageJobProgress = z.infer<typeof PackageJobProgressSchema>;
+export type CancelPackageJobRequest = z.infer<typeof CancelPackageJobRequestSchema>;
 export type BandwidthSettings = z.infer<typeof BandwidthSettingsSchema>;
 export type CmmSyncConfigRequest = z.infer<typeof CmmSyncConfigRequestSchema>;
 export type ToggleModelShareRequest = z.infer<typeof ToggleModelShareRequestSchema>;

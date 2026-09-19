@@ -81,6 +81,11 @@ declare global {
       verifyPreDownload: (req: import('../shared/ipcContracts').PreDownloadVerifyRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PreDownloadVerificationResult; error?: string }>;
       searchDiscoveredModels: (req: import('../shared/ipcContracts').DiscoverySearchRequest) => Promise<{ success: boolean; data?: import('../protocol/discoveryTypes').DiscoveredModelWithTrust[]; error?: string }>;
       getDiscoveryStats: () => Promise<{ success: boolean; data?: { connectedDiscoveryPeers: number; indexedLocalModels: number; cachedDiscoveredModels: number; totalQueriesProcessed: number }; error?: string }>;
+      startPackageJob: (req: import('../shared/ipcContracts').CreateSwarmPackageRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PackageJobProgress; error?: string }>;
+      getActivePackagingJob: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PackageJobProgress | null; error?: string }>;
+      cancelPackagingJob: (jobId?: string) => Promise<{ success: boolean; error?: string }>;
+      clearPackagingJob: () => Promise<{ success: boolean; error?: string }>;
+      onPackageProgress: (callback: (progress: import('../shared/ipcContracts').PackageJobProgress) => void) => () => void;
     };
   }
 }
