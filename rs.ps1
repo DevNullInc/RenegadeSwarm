@@ -14,14 +14,14 @@
   The action to perform: start, stop, restart, status, build, package, dist, test, clean-assets, help (default: start)
 
 .PARAMETER Port
-  Vite dev-server port (default: 5174)
+  Vite dev-server port (default: 5181)
 
 .PARAMETER ListenPort
   P2P BitTorrent wire protocol port (default: 6881)
 
 .EXAMPLE
   .\rs.ps1 start
-  .\rs.ps1 start -Port 5174
+  .\rs.ps1 start -Port 5181
   .\rs.ps1 stop
   .\rs.ps1 restart
   .\rs.ps1 status
@@ -34,7 +34,7 @@ param(
   [ValidateSet('start', 'run', 'dev', 'stop', 'kill', 'restart', 'status', 'build', 'package', 'dist', 'test', 'clean-assets', 'bump-version', 'version', 'help')]
   [string]$Action = 'start',
 
-  [int]$Port = 5180,
+  [int]$Port = 5181,
   [int]$ListenPort = 6881,
 
   [switch]$Headless,
@@ -570,7 +570,7 @@ function Show-Help {
   Write-Host '    help               Display this help text' -ForegroundColor White
   Write-Host ''
   Write-Host '  OPTIONS:' -ForegroundColor Yellow
-  Write-Host '    -Port <int>        Set custom renderer port (default: 5180)' -ForegroundColor White
+  Write-Host '    -Port <int>        Set custom renderer port (default: 5181)' -ForegroundColor White
   Write-Host '    -CleanAssets       Prune stale bundles before starting' -ForegroundColor White
   Write-Host ''
 }

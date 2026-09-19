@@ -194,6 +194,30 @@ export interface IpcResponse<T = unknown> {
   error?: string;
 }
 
+export const CmmIngestModelRequestSchema = z.object({
+  filePath: z.string().min(1),
+  fileName: z.string().optional(),
+  sha256: z.string().optional(),
+  modelType: z.string().optional(),
+  baseModel: z.string().optional(),
+  civitaiModelId: z.number().int().positive().optional(),
+  civitaiVersionId: z.number().int().positive().optional(),
+  tags: z.array(z.string()).optional(),
+  timestamp: z.number().optional(),
+});
+
+export interface CmmLoopbackHealthResponse {
+  status: 'online';
+  service: 'RenegadeSwarm';
+  version: string;
+  peers: number;
+  seeding: number;
+  activeDownloads: number;
+  downloadSpeedBps: number;
+  uploadSpeedBps: number;
+  timestamp: number;
+}
+
 export type AddMagnetRequest = z.infer<typeof AddMagnetRequestSchema>;
 export type TorrentControlRequest = z.infer<typeof TorrentControlRequestSchema>;
 export type CreateSwarmPackageRequest = z.infer<typeof CreateSwarmPackageRequestSchema>;
@@ -209,5 +233,6 @@ export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;
 export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema>;
 export type PreDownloadVerifyRequest = z.infer<typeof PreDownloadVerifyRequestSchema>;
 export type DiscoverySearchRequest = z.infer<typeof DiscoverySearchRequestSchema>;
+export type CmmIngestModelRequest = z.infer<typeof CmmIngestModelRequestSchema>;
 
 

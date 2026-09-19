@@ -21,6 +21,7 @@ import path from 'path';
 import { registerIpcHandlers } from './ipcHandlers';
 import { trayManager } from './tray';
 import { swarmEngine } from './engine/swarmEngine';
+import { swarmDaemonServer } from './engine/swarmDaemonServer';
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
@@ -65,6 +66,12 @@ async function createWindow() {
 
   registerIpcHandlers();
   await swarmEngine.init();
+
+  // Configure and start Swarm HTTP Daemon Server on 127.0.0.1:5180
+  swarmDaemonServer.setMainWindow(mainWindow);
+  await swarmDaemonServer.start().catch((err) => {
+    console.warn('[Swarm] Daemon server could not start on port 5180:', err.message);
+  });
 
   if (process.env.VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -119,6 +126,7 @@ app.whenReady().then(createWindow);
 
 app.on('before-quit', () => {
   isQuitting = true;
+  swarmDaemonServer.stop().catch(() => {});
 });
 
 app.on('window-all-closed', () => {

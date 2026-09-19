@@ -52,7 +52,7 @@ export class SwarmEngine extends EventEmitter {
     if (this.isInitialized) return;
     this.isInitialized = true;
     this.pollTimer = setInterval(() => {
-      this.pollDaemon().catch((err) => {
+      this.pollDaemon().catch((_err) => {
         // Log polling error quietly
       });
     }, 1000);
@@ -249,7 +249,6 @@ export class SwarmEngine extends EventEmitter {
 
       this.torrentIds.set(infoHash, dt.id);
       let torrent = this.activeSwarms.get(infoHash);
-      const isNew = !torrent;
 
       if (!torrent) {
         torrent = {
@@ -385,6 +384,18 @@ export class SwarmEngine extends EventEmitter {
     }
 
     this.emit('torrent:completed', torrent);
+  }
+
+  /**
+   * Ingests a model downloaded and companion-packaged by RenegadeCMM for zero-latency indexing.
+   */
+  public ingestDownloadedModel(filePath: string, metadata?: any): void {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    const fileName = metadata?.fileName || path.basename(filePath);
+    const sha256 = metadata?.sha256;
+    const modelType = metadata?.modelType || 'Checkpoint';
+
+    this.emit('cmm:modelIngested', { filePath, fileName, sha256, modelType });
   }
 }
 
