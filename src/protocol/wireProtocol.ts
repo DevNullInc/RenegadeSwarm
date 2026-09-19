@@ -204,7 +204,7 @@ export const RS_DISCOVERY_EXTENSION_ID = 1;
 
 export interface ExtendedHandshakeDict {
   m: Record<string, number>; // Map of extension name to local extension ID
-  v?: string;                // Client name/version (e.g. 'RenegadeSwarm/0.2.0')
+  v?: string;                // Client name/version (e.g. 'RenegadeSwarm/0.3.0')
   renegade_swarm_version?: string;
   capabilities?: string[];
   [key: string]: any;

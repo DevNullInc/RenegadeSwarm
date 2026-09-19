@@ -117,7 +117,7 @@ When packaging models in the Seeder or inspecting local models, RenegadeSwarm pr
 
 1. **CivitAI API Lookups**:
    - For diffusion/image models, the application queries `https://civitai.com/api/v1/model-versions/by-hash/:hash` via HTTPS.
-   - **Data Transmitted**: The SHA256 file hash and client User-Agent header (`RenegadeSwarm/0.2.0`).
+   - **Data Transmitted**: The SHA256 file hash and client User-Agent header (`RenegadeSwarm/0.3.0`).
    - **Data Received**: Model title, creator username, tags, base model, description, and preview image URLs.
    - **LLM Exemption**: Large Language Models (`.gguf`, Llama, Mistral, Qwen, DeepSeek) are detected automatically and skip CivitAI lookups.
    - **HTML Sterilization**: All incoming text is sanitized and stripped of executable tags and HTML entities (`sanitizeAndDecodeHtml`) before rendering.

@@ -264,7 +264,7 @@ To provide native, decentralized model search without scraping open BitTorrent D
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                   BEP 10 EXTENDED DISCOVERY HANDSHAKE                            │
 │  • Extension ID: 1 (renegade_swarm_discovery_v1)                                 │
-│  • Client ID: RenegadeSwarm/0.2.0                                                │
+│  • Client ID: RenegadeSwarm/0.3.0                                                │
 │  • Capability Flags: discovery, metadata_sync, wot_attestation                   │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          │

@@ -42,8 +42,8 @@ describe('P2P Model Discovery Protocol (BEP 10)', () => {
         [RENEGADE_SWARM_DISCOVERY_EXTENSION]: RS_DISCOVERY_EXTENSION_ID,
         ut_metadata: 2,
       },
-      v: 'RenegadeSwarm/0.2.0',
-      renegade_swarm_version: '0.2.0',
+      v: 'RenegadeSwarm/0.3.0',
+      renegade_swarm_version: '0.3.0',
       capabilities: ['model_catalog', 'wot_signatures'],
     };
 
@@ -59,7 +59,7 @@ describe('P2P Model Discovery Protocol (BEP 10)', () => {
     const parsedDict = parseExtendedHandshake(parsedExt!.data);
     expect(parsedDict).not.toBeNull();
     expect(parsedDict!.m[RENEGADE_SWARM_DISCOVERY_EXTENSION]).toBe(RS_DISCOVERY_EXTENSION_ID);
-    expect(parsedDict!.v).toBe('RenegadeSwarm/0.2.0');
+    expect(parsedDict!.v).toBe('RenegadeSwarm/0.3.0');
     expect(parsedDict!.capabilities).toContain('wot_signatures');
   });
 

@@ -160,7 +160,7 @@ export async function buildSwarmManifest(
     swarmSpecVersion: '1.0.0' as const,
     manifestId: crypto.randomUUID(),
     createdAt: Date.now(),
-    createdBy: 'RenegadeSwarm/0.1.0',
+    createdBy: 'RenegadeSwarm/0.3.0',
     pieceLength,
     totalSizeBytes: totalSize,
     model: {

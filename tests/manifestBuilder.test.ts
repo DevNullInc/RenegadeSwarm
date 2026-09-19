@@ -78,7 +78,7 @@ describe('Swarm Manifest Builder & Protocol Verification', () => {
     });
 
     expect(manifest.swarmSpecVersion).toBe('1.0.0');
-    expect(manifest.createdBy).toBe('RenegadeSwarm/0.1.0');
+    expect(manifest.createdBy).toMatch(/^RenegadeSwarm\/\d+\.\d+\.\d+/);
     expect(manifest.model.title).toBe('FLUX Test LoRA');
     expect(manifest.files.length).toBe(2);
     expect(manifest.hashes.sha256.length).toBe(64);

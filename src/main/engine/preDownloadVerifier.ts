@@ -130,7 +130,7 @@ export class PreDownloadVerifier {
     try {
       const res = await fetch(`https://civitai.com/api/v1/model-versions/by-hash/${sha256}`, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.2.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.3.0' },
       });
 
       if (!res.ok) return null;
@@ -207,7 +207,7 @@ export class PreDownloadVerifier {
     try {
       const res = await fetch(`https://huggingface.co/api/models/${encodeURIComponent(cleanRepo)}`, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.2.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.3.0' },
       });
 
       if (!res.ok) return null;

@@ -28,8 +28,8 @@ We actively provide security patches and updates for the following release branc
 
 | Version | Supported | Security Patch Window |
 | :--- | :---: | :--- |
-| **0.2.x (Current / Main)** | ✅ Yes | Active development & critical hotfixes |
-| **< 0.2.0** | ❌ No | Deprecated / Unsupported |
+| **0.3.x (Current / Main)** | ✅ Yes | Active development & critical hotfixes |
+| **< 0.3.0** | ❌ No | Deprecated / Unsupported |
 
 ---
 

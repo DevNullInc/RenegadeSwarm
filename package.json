@@ -1,6 +1,6 @@
 {
   "name": "renegadeswarm",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "desktopName": "renegadeswarm.desktop",
   "description": "RenegadeSwarm - Decentralized P2P AI Model Distribution Network with RenegadeCMM Integration",
   "engines": {

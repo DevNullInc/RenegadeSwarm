@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-09-19
+
+### Major Features & Architectural Additions
+
+#### 1. RenegadeSwarm-Exclusive P2P Model Search & Discovery Engine (Milestone 4 Completed)
+- **BEP 10 Extended Discovery Handshake (`renegade_swarm_discovery_v1`)**:
+  - Implemented application-specific extension messaging over BitTorrent protocol to discover and query models exclusively across live, certified RenegadeSwarm instances while preserving open BitTorrent data downloading.
+- **DiscoveryEngine Service (`src/main/engine/discoveryEngine.ts`)**:
+  - Local catalog indexing, peer search broadcast, response deduplication, TTL caching, and Web of Trust trust-scoring.
+- **Dedicated Discovery View (`src/renderer/components/DiscoveryView.tsx`)**:
+  - Desktop search interface with real-time debounced keyword search, category filter chips (`Checkpoints`, `LoRAs`, `GGUF/LLM`, `VAEs`, `ControlNets`), and live swarm peer count telemetry.
+- **Amber Warning Modal Safeguard**:
+  - Safeguard modal requiring explicit confirmation and displaying security disclosures before initiating downloads on unverified community models.
+- **Automated Protocol & Engine Tests**:
+  - Comprehensive unit and protocol test coverage in `tests/discoveryProtocol.test.ts` and `tests/discoveryEngine.test.ts`.
+
+#### 2. Packaging State Hoisting & Background Job Persistence (Milestone 5 Completed)
+- **PackageJobManager Service (`src/main/engine/packageJobManager.ts`)**:
+  - Background job manager in the Electron main process to handle long-running model packaging, piece hashing, signature generation, and swarm seeding asynchronously.
+- **Tab-Switching State Persistence**:
+  - Hoisted active packaging state out of renderer memory, allowing users to navigate between views while 50GB+ models are processed.
+- **Streaming SHA-256 Chunk Progress**:
+  - Real-time percentage and byte progress streaming across IPC via push events (`swarm:packageProgress`).
+- **Cancellation Tokens & Graceful Cleanup**:
+  - Safe abort mechanics for active read streams, cleaning up temporary torrent artifacts and resetting engine state on user cancellation.
+- **Typed IPC Channels**:
+  - Added `swarm:startPackageJob`, `swarm:getActivePackagingJob`, `swarm:cancelPackagingJob`, and `swarm:clearPackagingJob` in `ipcContracts.ts`, `ipcHandlers.ts`, and `preload.ts`.
+
+#### 3. Pre-Download Verification Handshake (`PreDownloadVerifier`)
+- **Multi-Tier Pre-Download Verification Engine (`src/main/engine/preDownloadVerifier.ts`)**:
+  - Validates model hashes, creator metadata, and provenance before initiating heavy weight downloads.
+- **Multi-Registry Verification**:
+  - Validates SHA-256 hashes against CivitAI (`/api/v1/model-versions/by-hash/:hash`) and Hugging Face repository endpoints with request timeouts and user-agent branding.
+- **Custom Model Verifier**:
+  - Cryptographically validates Ed25519 creator signatures on unindexed custom models (LoRAs, fine-tunes, checkpoints, GGUFs) against the local Web of Trust (WoT) keyring, rejecting blocked creators immediately.
+- **Real-Time UI Handshake**:
+  - Integrated debounced pre-download verification card into `DashboardView.tsx` Add Magnet modal, rendering live trust scores, base models, creator tags, and preview images.
+
+#### 4. Automatic Companion File Triplet Harvesting & Persistence
+- **Companion File Discovery (`discoverCompanionFiles`)**:
+  - Sibling metadata discovery for `<model_base>.sha256`, `<model_base>.civitai.info` / `<model_base>.huggingface.info` / `<model_base>.info`, and `<model_base>.<ext>` preview image assets.
+- **Companion Asset Auto-Generation**:
+  - Auto-generation in `syncQueue.ts` upon model promotion from quarantine and via `PreDownloadVerifier.saveCompanionAssets`.
+
+#### 5. Embedded AI Workflow Parameter Inspection
+- **Workflow Metadata Inspector (`inspectImageWorkflowMetadata`)**:
+  - Parses embedded AI generation parameters from image buffers: ComfyUI workflow graphs, Automatic1111 generation parameters, LoRA trigger words (`<lora:Name:weight>`), and positive prompts.
+
+---
+
+### Security Hardening & Bug Fixes
+- **AST-Free HTML Sanitizer & Entity Decoder (CWE-116 & CWE-79)**:
+  - Replaced regex-based HTML stripping with an AST-free character scanner (`sanitizeAndDecodeHtml`) in `modelMetadataExtractor.ts`, resolving multi-pass encoded HTML entities while discarding `<script>` and `<style>` blocks.
+- **Preview Cache Path Traversal Defense (CWE-22)**:
+  - Enforced strict hexadecimal hash sanitization (`/^[a-fA-F0-9]+$/`) and URL scheme validation on `downloadAndCachePreview`.
+- **Automated GitHub Actions CodeQL Integration**:
+  - Configured `.github/workflows/codeql.yml` with `security-and-quality` query suite and `actions/checkout@v5`.
+- **Test Keyring Isolation**:
+  - Isolated test keyring management in `tests/preDownloadVerifier.test.ts` to prevent test mock pollution in `.renegadeswarm_security/keyring.json`.
+- **Unit Test Suite Expansion**:
+  - 111/111 unit & integration tests passing across 23 test suites.
+
+---
+
 ## [0.2.0] - 2026-09-12
 
 ### Major Features & Architectural Additions

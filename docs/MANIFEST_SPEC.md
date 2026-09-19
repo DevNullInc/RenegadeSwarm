@@ -13,7 +13,7 @@ Manifests are stored as human-readable JSON files with the `.swarm` extension or
   "swarmSpecVersion": "1.0.0",
   "manifestId": "a4b88950-8b9f-4df0-94e8-ec5ef4a67e10",
   "createdAt": 1723456789000,
-  "createdBy": "RenegadeSwarm/0.1.0",
+  "createdBy": "RenegadeSwarm/0.3.0",
   "pieceLength": 4194304,
   "totalSizeBytes": 2400000000,
   "model": {

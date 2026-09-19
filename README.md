@@ -2,7 +2,7 @@
 
 > **A decentralized, torrent-style AI model distribution network with automatic ComfyUI organization and seamless RenegadeCMM integration.**
 
-[![Version: 0.2.0](https://img.shields.io/badge/version-0.2.0-purple.svg)](https://github.com/DevNullInc/RenegadeSwarm/releases)
+[![Version: 0.3.0](https://img.shields.io/badge/version-0.3.0-purple.svg)](https://github.com/DevNullInc/RenegadeSwarm/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)

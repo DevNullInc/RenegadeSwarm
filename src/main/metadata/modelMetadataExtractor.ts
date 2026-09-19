@@ -844,7 +844,7 @@ export class ModelMetadataExtractor {
     try {
       const response = await fetch(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.1.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.3.0' },
       });
 
       if (!response.ok) return null;
@@ -962,7 +962,7 @@ export class ModelMetadataExtractor {
       const timeoutId = setTimeout(() => controller.abort(), 6000);
       const res = await fetch(parsedUrl.toString(), {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.2.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.3.0' },
       });
       clearTimeout(timeoutId);
 
@@ -1010,7 +1010,7 @@ export class ModelMetadataExtractor {
 
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'RenegadeSwarm/0.1.0' },
+        headers: { 'User-Agent': 'RenegadeSwarm/0.3.0' },
       });
 
       if (!res.ok) return null;
