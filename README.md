@@ -22,9 +22,9 @@ Whether you are distributing a brand-new 25GB base checkpoint or downloading com
 
 ---
 
-## Zero-Trust Security & User Safety Principles
+## Zero-Trust Security & Defense-in-Depth
 
-Security is the fundamental pillar of RenegadeSwarm. Because P2P networks allow transfers from unknown peers, RenegadeSwarm enforces a strict **Zero-Trust Defense-in-Depth Architecture** across every layer of the application so users can run, download, and seed with 100% peace of mind:
+Security is the fundamental pillar of RenegadeSwarm. Because P2P networks allow transfers from unknown peers, RenegadeSwarm enforces defense-in-depth controls across process boundaries, loopback endpoints, storage vaults, and model ingestion. Certain advanced DHT defenses remain in active implementation:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
@@ -86,7 +86,7 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 
 ### 4. Cryptographic Provenance, Machine-Bound Vault & Anti-Abuse Key Lockout
 * Manifests are signed by model creators using 32-byte **Ed25519** public keys.
-* **Machine-Bound AES-256-GCM Vault**: Private keys are encrypted at rest using machine-and-user entropy, ensuring plaintext keys are never stored on disk.
+* **Machine-Bound OS SafeStorage Vault**: Private keys are protected using native OS secure storage (`safeStorage`) in the Main process, ensuring plaintext keys are never stored on disk or exposed to the renderer.
 * **Anti-Abuse Regeneration Lockout**: Enforces a 24-hour cooldown between keypair regenerations to prevent malicious actors from cycling disposable identities and evading Web of Trust blacklists.
 * **Web of Trust Keyring**: Downloader clients verify signatures against the local Keyring and Web-of-Trust tiers (`VerifiedCreator`, `Community`, `Untrusted`, `Blocked`). See [Web of Trust Guide](docs/WEB_OF_TRUST.md) for details.
 

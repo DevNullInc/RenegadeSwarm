@@ -72,11 +72,10 @@ declare global {
       removeKeyringEntry: (publicKeyHex: string) => Promise<{ success: boolean; data?: any[]; error?: string }>;
       exportKeyring: () => Promise<{ success: boolean; data?: string; error?: string }>;
       importKeyring: (jsonString: string) => Promise<{ success: boolean; data?: { importedCount: number; entries: any[] }; error?: string }>;
-      getUserIdentity: () => Promise<{ success: boolean; data?: any; error?: string }>;
-      setUserIdentity: (identity: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-      generateIdentity: (creatorName: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+      getUserIdentity: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').UserIdentityPublic; error?: string }>;
+      updateUserAlias: (req: import('../shared/ipcContracts').UpdateUserAliasRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').UserIdentityPublic; error?: string }>;
+      generateIdentity: (creatorName: string) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').UserIdentityPublic; error?: string }>;
       getKeyringLockoutStatus: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').LockoutStatus; error?: string }>;
-      generateKeyPair: () => Promise<{ success: boolean; data?: { publicKeyHex: string; privateKeyHex: string }; error?: string }>;
       openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
       verifyPreDownload: (req: import('../shared/ipcContracts').PreDownloadVerifyRequest) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').PreDownloadVerificationResult; error?: string }>;
       searchDiscoveredModels: (req: import('../shared/ipcContracts').DiscoverySearchRequest) => Promise<{ success: boolean; data?: import('../protocol/discoveryTypes').DiscoveredModelWithTrust[]; error?: string }>;

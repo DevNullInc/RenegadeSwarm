@@ -67,14 +67,17 @@ All data created or processed by RenegadeSwarm is stored locally within your use
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### A. Machine-Bound Cryptographic Key Vault
-* Private Ed25519 signing keys are encrypted at rest using **AES-256-GCM** derived from machine-and-user entropy.
-* Plaintext private keys are never stored on disk or transmitted over the network.
-* An anti-abuse rate-limiter (15-minute regeneration lockout) is maintained locally to prevent disposable identity cycling.
+### A. Machine-Bound Cryptographic Key Vault & Hardware Binding Disclosure
+* **Machine Fingerprinting & Hardware Binding**: To safeguard private cryptographic keys against offline exfiltration, identity theft, and network spoofing, RenegadeSwarm binds local key encryption to the host machine's physical hardware and operating system profile (e.g. Windows DPAPI user/machine master keys, macOS Keychain / Secure Enclave hardware identifiers, Linux Secret Service / `/etc/machine-id`, and local host/user entropy).
+* **Anti-Spoofing & Payload Protection**: This machine binding guarantees that private signing keys cannot be extracted, duplicated, or decrypted on another device, preventing malicious actors from copying vault files to forge creator identities or sign malicious model payloads across the swarm.
+* **Zero Telemetry Notice**: All machine fingerprinting and hardware entropy derivation occurs strictly in local process memory. This hardware profile is **never transmitted, logged, phoned home, or shared with third parties or peer nodes**.
+* **Protection at Rest**: Private Ed25519 signing keys are protected using **native OS safeStorage** in the Electron Main process and are never exposed across renderer IPC or network bridges. Plaintext private keys are never stored on disk or transmitted over the network.
+* **Anti-Abuse Lockout**: An anti-abuse rate-limiter (24-hour regeneration lockout) is maintained locally to prevent disposable identity cycling and Web-of-Trust evasion.
 
-### B. Local SQLite Database
+### B. Local SQLite Database & Loopback HTTP Bridge
 * `renegadeswarm.sqlite` stores active transfer statuses, custom model folder paths, bandwidth allocations, and local sharing permissions.
 * The application communicates with your local RenegadeCMM database (`renegadecmm.sqlite`) through direct local SQLite `ATTACH DATABASE` operations, with zero cloud relays.
+* The local HTTP daemon bridge (`127.0.0.1:5180`) restricts mutating operations and database metadata inspection via timing-safe cryptographic Bearer tokens.
 
 ---
 

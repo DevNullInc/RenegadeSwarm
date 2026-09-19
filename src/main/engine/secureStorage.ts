@@ -18,12 +18,36 @@
 
 import crypto from 'crypto';
 import os from 'os';
+import { safeStorage } from 'electron';
 
 const ALGORITHM = 'aes-256-gcm';
 
 /**
- * Derives machine-and-user specific entropy available consistently across both
- * the Electron desktop main process and CLI/test environments.
+ * Checks whether native OS keychain encryption (Windows DPAPI, macOS Keychain, Linux Secret Service) is available.
+ */
+export function isOsVaultAvailable(): boolean {
+  try {
+    return !!(safeStorage && safeStorage.isEncryptionAvailable && safeStorage.isEncryptionAvailable());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns the current vault encryption status.
+ */
+export function getVaultStatus(): 'encrypted_os_vault' | 'unencrypted_memory_only' | 'software_gcm_test' {
+  if (isOsVaultAvailable()) {
+    return 'encrypted_os_vault';
+  }
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    return 'software_gcm_test';
+  }
+  return 'unencrypted_memory_only';
+}
+
+/**
+ * Derives machine-and-user specific entropy for test-only software AES-256-GCM fallback.
  */
 export function getMachineEntropy(): string {
   let user = '';
@@ -42,42 +66,79 @@ const MACHINE_SALT = crypto.createHash('sha256').update(getMachineEntropy()).dig
 const MACHINE_KEY = crypto.scryptSync('renegadeswarm-device-secret-key-v1', MACHINE_SALT, 32);
 
 /**
- * Encrypts a plaintext key or secret using machine-and-user bound AES-256-GCM.
+ * Encrypts a plaintext key using Electron's native safeStorage (OS Keychain).
+ * In test environments, falls back to AES-256-GCM.
+ * In production without OS keychain, returns empty string (refuses to write plaintext).
  */
-export function encryptSecret(plainText: string): string {
+export function encryptSecret(plainText: string): string | null {
   if (!plainText) return '';
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, MACHINE_KEY, iv);
-  let encrypted = cipher.update(plainText, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  return `mb_gcm:${iv.toString('hex')}:${authTag}:${encrypted}`;
+
+  // 1. Native OS Keychain via safeStorage
+  if (isOsVaultAvailable()) {
+    try {
+      const encryptedBuf = safeStorage.encryptString(plainText);
+      return `os_vault:${encryptedBuf.toString('base64')}`;
+    } catch (err) {
+      console.warn('[SecureStorage] Native safeStorage encryption failed:', err);
+    }
+  }
+
+  // 2. Test harness fallback only (NODE_ENV=test / VITEST)
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ALGORITHM, MACHINE_KEY, iv);
+    let encrypted = cipher.update(plainText, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    const authTag = cipher.getAuthTag().toString('hex');
+    return `mb_gcm:${iv.toString('hex')}:${authTag}:${encrypted}`;
+  }
+
+  // 3. Production without OS vault: Refuse to write plaintext private key to disk
+  return null;
 }
 
 /**
- * Decrypts machine-bound AES-256-GCM ciphertext.
+ * Decrypts ciphertext from OS keychain or test harness AES-256-GCM.
  */
-export function decryptSecret(cipherText: string): string {
+export function decryptSecret(cipherText: string): string | null {
   if (!cipherText) return '';
-  if (typeof cipherText !== 'string' || !cipherText.startsWith('mb_gcm:')) {
-    return cipherText;
-  }
 
-  try {
-    const parts = cipherText.split(':');
-    if (parts.length === 4) {
-      const [, ivHex, authTagHex, encryptedText] = parts;
-      const iv = Buffer.from(ivHex, 'hex');
-      const authTag = Buffer.from(authTagHex, 'hex');
-      const decipher = crypto.createDecipheriv(ALGORITHM, MACHINE_KEY, iv);
-      decipher.setAuthTag(authTag);
-      let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
-      decrypted += decipher.final('utf8');
-      return decrypted;
+  // 1. Native OS Keychain decryption
+  if (cipherText.startsWith('os_vault:')) {
+    if (!isOsVaultAvailable()) {
+      console.warn('[SecureStorage] safeStorage is unavailable to decrypt os_vault payload');
+      return null;
     }
-  } catch (err) {
-    console.warn('[SecureStorage] Decryption failed, using fallback:', err);
+    try {
+      const base64Data = cipherText.slice(9);
+      const encryptedBuf = Buffer.from(base64Data, 'base64');
+      return safeStorage.decryptString(encryptedBuf);
+    } catch (err) {
+      console.warn('[SecureStorage] Failed to decrypt os_vault payload:', err);
+      return null;
+    }
   }
 
-  return cipherText;
+  // 2. Test harness fallback decryption
+  if (cipherText.startsWith('mb_gcm:')) {
+    try {
+      const parts = cipherText.split(':');
+      if (parts.length === 4) {
+        const [, ivHex, authTagHex, encryptedText] = parts;
+        const iv = Buffer.from(ivHex, 'hex');
+        const authTag = Buffer.from(authTagHex, 'hex');
+        const decipher = crypto.createDecipheriv(ALGORITHM, MACHINE_KEY, iv);
+        decipher.setAuthTag(authTag);
+        let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return decrypted;
+      }
+    } catch (err) {
+      console.warn('[SecureStorage] Test fallback decryption failed:', err);
+      return null;
+    }
+  }
+
+  // Do not trust unencrypted strings
+  return null;
 }

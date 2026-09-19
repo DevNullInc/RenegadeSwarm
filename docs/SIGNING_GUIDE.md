@@ -21,7 +21,11 @@ Inside the desktop application:
 2. Enter your public handle (e.g. `@anon`) and click **Generate Keypair**.
 3. Your 32-byte Ed25519 keypair is created instantly:
    - **Public Key**: Displayed in hex format with a 1-click copy button to paste into your Hugging Face, CivitAI, or GitHub creator profiles.
-   - **Private Key**: Masked by default with reveal controls and encrypted on disk using **Machine-Bound AES-256-GCM** (never saved in plaintext).
+   - **Private Key**: Protected in the Electron Main process via machine-bound OS hardware encryption (`safeStorage`), never exposed across the renderer IPC or network bridges.
+
+> [!NOTE]
+> **Machine-Bound Hardware Encryption & Anti-Spoofing**:
+> Key vaults are sealed using local machine fingerprinting and OS hardware credentials (Windows DPAPI, macOS Keychain / Secure Enclave, Linux Secret Service). This machine-binding ensures that private signing keys cannot be cloned or moved to another device to spoof creator identities or inject malicious payloads into the swarm. All hardware fingerprinting remains 100% local and is never transmitted across the network.
 
 > [!IMPORTANT]
 > **Anti-Abuse Regeneration Lockout (24-Hour Cooldown)**:

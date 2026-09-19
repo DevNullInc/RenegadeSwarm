@@ -26,14 +26,13 @@ import {
   CmmSyncConfigRequestSchema,
   ToggleModelShareRequestSchema,
   KeyringEntrySchema,
-  UserIdentitySchema,
+  UpdateUserAliasRequestSchema,
   OpenExternalUrlRequestSchema,
   PreDownloadVerifyRequestSchema,
   DiscoverySearchRequestSchema,
   IpcResponse,
 } from '../shared/ipcContracts';
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
-import { generateEd25519KeyPair } from '../protocol/crypto';
 import { swarmEngine } from './engine/swarmEngine';
 import { packageJobManager } from './engine/packageJobManager';
 import { bandwidthScheduler } from './engine/bandwidthScheduler';
@@ -87,6 +86,7 @@ export function registerIpcHandlers() {
       }
 
       const filePath = result.filePaths[0];
+      cmmFolderRouter.recordSessionDialogPath(filePath);
       const metadata = await modelMetadataExtractor.extractMetadata(filePath);
       return { success: true, data: { filePath, metadata } };
     } catch (err: any) {
@@ -111,6 +111,7 @@ export function registerIpcHandlers() {
       }
 
       const filePath = result.filePaths[0];
+      cmmFolderRouter.recordSessionDialogPath(filePath);
       const inspection = await contentInspector.inspectFile(filePath);
       return { success: true, data: { filePath, workflowMeta: inspection.metadata } };
     } catch (err: any) {
@@ -132,7 +133,9 @@ export function registerIpcHandlers() {
         return { success: false, error: 'Directory selection canceled' };
       }
 
-      return { success: true, data: { folderPath: result.filePaths[0] } };
+      const folderPath = result.filePaths[0];
+      cmmFolderRouter.recordSessionDialogPath(folderPath);
+      return { success: true, data: { folderPath } };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -154,7 +157,9 @@ export function registerIpcHandlers() {
         return { success: false, error: 'File selection canceled' };
       }
 
-      return { success: true, data: { filePath: result.filePaths[0] } };
+      const filePath = result.filePaths[0];
+      cmmFolderRouter.recordSessionDialogPath(filePath);
+      return { success: true, data: { filePath } };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -162,7 +167,10 @@ export function registerIpcHandlers() {
 
   ipcMain.handle('model:extractMetadata', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
-      if (typeof raw !== 'string') throw new Error('Invalid file path');
+      if (typeof raw !== 'string' || !raw.trim()) throw new Error('Invalid file path');
+      if (!cmmFolderRouter.isPathAllowed(raw)) {
+        throw new Error('Path access denied by security confinement policy');
+      }
       const metadata = await modelMetadataExtractor.extractMetadata(raw);
       return { success: true, data: metadata };
     } catch (err: any) {
@@ -182,6 +190,9 @@ export function registerIpcHandlers() {
   ipcMain.handle('swarm:addMagnet', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const validated = AddMagnetRequestSchema.parse(raw);
+      if (validated.customDestination && !cmmFolderRouter.isPathAllowed(validated.customDestination)) {
+        throw new Error('Download destination denied by security confinement policy');
+      }
       const torrent = await swarmEngine.addMagnet(validated);
       return { success: true, data: torrent };
     } catch (err: any) {
@@ -222,6 +233,12 @@ export function registerIpcHandlers() {
   ipcMain.handle('swarm:createPackage', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const validated = CreateSwarmPackageRequestSchema.parse(raw);
+      if (!cmmFolderRouter.isPathAllowed(validated.modelFilePath)) {
+        throw new Error('Model file path denied by security confinement policy');
+      }
+      if (validated.previewFilePath && !cmmFolderRouter.isPathAllowed(validated.previewFilePath)) {
+        throw new Error('Preview file path denied by security confinement policy');
+      }
       const manifest = await swarmEngine.createPackageAndSeed(validated);
       return { success: true, data: manifest };
     } catch (err: any) {
@@ -232,6 +249,12 @@ export function registerIpcHandlers() {
   ipcMain.handle('swarm:startPackageJob', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const validated = CreateSwarmPackageRequestSchema.parse(raw);
+      if (!cmmFolderRouter.isPathAllowed(validated.modelFilePath)) {
+        throw new Error('Model file path denied by security confinement policy');
+      }
+      if (validated.previewFilePath && !cmmFolderRouter.isPathAllowed(validated.previewFilePath)) {
+        throw new Error('Preview file path denied by security confinement policy');
+      }
       const job = await packageJobManager.startJob(validated);
       return { success: true, data: job };
     } catch (err: any) {
@@ -324,6 +347,15 @@ export function registerIpcHandlers() {
   ipcMain.handle('cmm:configureSync', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const { cmmDbPath, comfyModelsRoot, defaultDownloadFolder } = CmmSyncConfigRequestSchema.parse(raw);
+      if (!cmmFolderRouter.isPathAllowed(cmmDbPath)) {
+        throw new Error('CMM SQLite database path denied by security confinement policy');
+      }
+      if (comfyModelsRoot && !cmmFolderRouter.isPathAllowed(comfyModelsRoot)) {
+        throw new Error('ComfyUI models root path denied by security confinement policy');
+      }
+      if (defaultDownloadFolder && !cmmFolderRouter.isPathAllowed(defaultDownloadFolder)) {
+        throw new Error('Default download folder denied by security confinement policy');
+      }
       cmmDbBridge.setCmmDbPath(cmmDbPath);
       if (comfyModelsRoot) {
         cmmFolderRouter.updateConfig({ rootPath: comfyModelsRoot });
@@ -363,7 +395,11 @@ export function registerIpcHandlers() {
       if (typeof raw !== 'string' || !raw.trim()) {
         throw new Error('Valid folder path is required');
       }
-      const ok = cmmFolderRouter.addCustomFolder(raw.trim());
+      const trimmed = raw.trim();
+      if (!cmmFolderRouter.isPathAllowed(trimmed)) {
+        throw new Error('Folder path denied by security confinement policy');
+      }
+      const ok = cmmFolderRouter.addCustomFolder(trimmed);
       if (!ok) {
         throw new Error('Folder is already in the model folders list or invalid.');
       }
@@ -419,7 +455,11 @@ export function registerIpcHandlers() {
       if (typeof raw !== 'string' || !raw.trim()) {
         throw new Error('Valid folder path is required');
       }
-      const ok = cmmFolderRouter.setDefaultDownloadFolder(raw.trim());
+      const trimmed = raw.trim();
+      if (!cmmFolderRouter.isPathAllowed(trimmed)) {
+        throw new Error('Folder path denied by security confinement policy');
+      }
+      const ok = cmmFolderRouter.setDefaultDownloadFolder(trimmed);
       const cfg = cmmFolderRouter.getConfig();
       await cmmDbBridge.savePersistedAppSettings({
         defaultFolder: cfg.defaultDownloadFolder,
@@ -531,10 +571,10 @@ export function registerIpcHandlers() {
     }
   });
 
-  ipcMain.handle('keyring:setUserIdentity', async (_, raw: unknown): Promise<IpcResponse> => {
+  ipcMain.handle('keyring:updateUserAlias', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
-      const validated = UserIdentitySchema.parse(raw);
-      const saved = keyringManager.setUserIdentity(validated);
+      const validated = UpdateUserAliasRequestSchema.parse(raw);
+      const saved = keyringManager.updateUserAlias(validated.creatorName);
       return { success: true, data: saved };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -555,15 +595,6 @@ export function registerIpcHandlers() {
     try {
       const status = keyringManager.getLockoutStatus();
       return { success: true, data: status };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  });
-
-  ipcMain.handle('crypto:generateKeyPair', async (): Promise<IpcResponse> => {
-    try {
-      const keypair = generateEd25519KeyPair();
-      return { success: true, data: keypair };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

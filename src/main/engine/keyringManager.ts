@@ -21,8 +21,13 @@ import * as path from 'path';
 import { app } from 'electron';
 import { KeyringEngine, KeyringEntry, TrustLevel } from '../../protocol/keyring';
 import { generateEd25519KeyPair } from '../../protocol/crypto';
-import { UserIdentity, UserIdentitySchema, KeyringEntrySchema, LockoutStatus } from '../../shared/ipcContracts';
-import { encryptSecret, decryptSecret } from './secureStorage';
+import {
+  UserIdentity,
+  UserIdentityPublic,
+  KeyringEntrySchema,
+  LockoutStatus,
+} from '../../shared/ipcContracts';
+import { encryptSecret, decryptSecret, getVaultStatus } from './secureStorage';
 
 export const DEFAULT_KEY_REGENERATION_LOCKOUT_SECONDS = 24 * 60 * 60; // 24 hours anti-abuse cooldown
 
@@ -39,7 +44,11 @@ export class KeyringManager {
     this.lockoutDurationSeconds = lockoutDurationSeconds;
 
     try {
-      this.storageDir = customStorageDir || (app?.getPath ? path.join(app.getPath('userData'), 'security') : path.join(process.cwd(), '.renegadeswarm_security'));
+      this.storageDir =
+        customStorageDir ||
+        (app?.getPath
+          ? path.join(app.getPath('userData'), 'security')
+          : path.join(process.cwd(), '.renegadeswarm_security'));
     } catch {
       this.storageDir = customStorageDir || path.join(process.cwd(), '.renegadeswarm_security');
     }
@@ -53,7 +62,7 @@ export class KeyringManager {
   private initStorage() {
     try {
       if (!fs.existsSync(this.storageDir)) {
-        fs.mkdirSync(this.storageDir, { recursive: true });
+        fs.mkdirSync(this.storageDir, { recursive: true, mode: 0o700 });
       }
 
       // Load Keyring
@@ -79,17 +88,36 @@ export class KeyringManager {
         this.saveKeyring();
       }
 
-      // Load User Identity with machine-bound encryption fallback
+      // Load User Identity with native OS safeStorage or test fallback
       if (fs.existsSync(this.identityFilePath)) {
         const raw = fs.readFileSync(this.identityFilePath, 'utf-8');
         const parsed = JSON.parse(raw);
 
-        // Decrypt machine-bound private key
-        if (parsed.privateKeyHex) {
-          parsed.privateKeyHex = decryptSecret(parsed.privateKeyHex);
+        let decryptedKey: string | null = null;
+        if (parsed.privateKeyEncrypted) {
+          decryptedKey = decryptSecret(parsed.privateKeyEncrypted);
+        } else if (parsed.privateKeyHex && (parsed.privateKeyHex.startsWith('os_vault:') || parsed.privateKeyHex.startsWith('mb_gcm:'))) {
+          decryptedKey = decryptSecret(parsed.privateKeyHex);
         }
 
-        this.userIdentity = UserIdentitySchema.parse(parsed);
+        if (decryptedKey) {
+          this.userIdentity = {
+            creatorName: parsed.creatorName || 'Anonymous Creator',
+            publicKeyHex: parsed.publicKeyHex,
+            privateKeyHex: decryptedKey,
+            createdAt: parsed.createdAt || Math.floor(Date.now() / 1000),
+            lastRegeneratedAt: parsed.lastRegeneratedAt,
+          };
+        } else {
+          // If private key could not be decrypted, preserve public identity in memory
+          this.userIdentity = {
+            creatorName: parsed.creatorName || 'Anonymous Creator',
+            publicKeyHex: parsed.publicKeyHex,
+            privateKeyHex: '',
+            createdAt: parsed.createdAt || Math.floor(Date.now() / 1000),
+            lastRegeneratedAt: parsed.lastRegeneratedAt,
+          };
+        }
       }
     } catch (err) {
       console.warn('[KeyringManager] Failed to load stored security configurations, using defaults:', err);
@@ -99,7 +127,7 @@ export class KeyringManager {
   private saveKeyring() {
     try {
       if (!fs.existsSync(this.storageDir)) {
-        fs.mkdirSync(this.storageDir, { recursive: true });
+        fs.mkdirSync(this.storageDir, { recursive: true, mode: 0o700 });
       }
       fs.writeFileSync(this.keyringFilePath, this.keyringEngine.exportKeyring(), 'utf-8');
     } catch (err) {
@@ -110,15 +138,26 @@ export class KeyringManager {
   private saveUserIdentity() {
     try {
       if (!fs.existsSync(this.storageDir)) {
-        fs.mkdirSync(this.storageDir, { recursive: true });
+        fs.mkdirSync(this.storageDir, { recursive: true, mode: 0o700 });
       }
       if (this.userIdentity) {
-        // Encrypt private key with machine-bound AES-256-GCM before writing to disk
+        let encryptedKey: string | null = null;
+        if (this.userIdentity.privateKeyHex) {
+          encryptedKey = encryptSecret(this.userIdentity.privateKeyHex);
+        }
+
         const recordToSave = {
-          ...this.userIdentity,
-          privateKeyHex: encryptSecret(this.userIdentity.privateKeyHex),
+          creatorName: this.userIdentity.creatorName,
+          publicKeyHex: this.userIdentity.publicKeyHex,
+          privateKeyEncrypted: encryptedKey || undefined,
+          createdAt: this.userIdentity.createdAt,
+          lastRegeneratedAt: this.userIdentity.lastRegeneratedAt,
         };
-        fs.writeFileSync(this.identityFilePath, JSON.stringify(recordToSave, null, 2), 'utf-8');
+
+        fs.writeFileSync(this.identityFilePath, JSON.stringify(recordToSave, null, 2), {
+          encoding: 'utf-8',
+          mode: 0o600,
+        });
       } else if (fs.existsSync(this.identityFilePath)) {
         fs.unlinkSync(this.identityFilePath);
       }
@@ -165,7 +204,25 @@ export class KeyringManager {
     return count;
   }
 
-  getUserIdentity(): UserIdentity | null {
+  /**
+   * Public DTO accessor. Strips private key before returning to callers.
+   */
+  getUserIdentity(): UserIdentityPublic | null {
+    if (!this.userIdentity) return null;
+    return {
+      creatorName: this.userIdentity.creatorName,
+      publicKeyHex: this.userIdentity.publicKeyHex,
+      hasPrivateKey: !!this.userIdentity.privateKeyHex,
+      vaultStatus: getVaultStatus(),
+      createdAt: this.userIdentity.createdAt,
+      lastRegeneratedAt: this.userIdentity.lastRegeneratedAt,
+    };
+  }
+
+  /**
+   * Internal accessor for Electron Main process cryptographic signing only.
+   */
+  getInternalUserIdentity(): UserIdentity | null {
     return this.userIdentity ? { ...this.userIdentity } : null;
   }
 
@@ -194,16 +251,18 @@ export class KeyringManager {
     };
   }
 
-  setUserIdentity(identity: UserIdentity): UserIdentity {
-    const validated = UserIdentitySchema.parse(identity);
-    this.userIdentity = validated;
+  updateUserAlias(creatorName: string): UserIdentityPublic {
+    if (!this.userIdentity) {
+      return this.generateNewIdentity(creatorName);
+    }
+    this.userIdentity.creatorName = creatorName.trim() || 'Anonymous Creator';
     this.saveUserIdentity();
-    return { ...this.userIdentity };
+    return this.getUserIdentity()!;
   }
 
-  generateNewIdentity(creatorName: string, force = false): UserIdentity {
+  generateNewIdentity(creatorName: string, isTest = false): UserIdentityPublic {
     const lockout = this.getLockoutStatus();
-    if (!lockout.canGenerate && !force) {
+    if (!lockout.canGenerate && !isTest) {
       const hours = Math.floor(lockout.lockoutRemainingSeconds / 3600);
       const minutes = Math.ceil((lockout.lockoutRemainingSeconds % 3600) / 60);
       const timeStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes} minutes`;
@@ -214,14 +273,20 @@ export class KeyringManager {
 
     const now = Math.floor(Date.now() / 1000);
     const { publicKeyHex, privateKeyHex } = generateEd25519KeyPair();
-    const identity: UserIdentity = {
+    this.userIdentity = {
       creatorName: creatorName.trim() || 'Anonymous Creator',
       publicKeyHex,
       privateKeyHex,
       createdAt: this.userIdentity ? this.userIdentity.createdAt : now,
       lastRegeneratedAt: now,
     };
-    return this.setUserIdentity(identity);
+
+    this.saveUserIdentity();
+    return this.getUserIdentity()!;
+  }
+
+  getStorageVaultPath(): string {
+    return this.identityFilePath;
   }
 }
 

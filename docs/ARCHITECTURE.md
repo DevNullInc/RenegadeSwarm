@@ -434,10 +434,11 @@ RenegadeSwarm is designed to integrate natively with **RenegadeCMM** without run
 
 Every swarm manifest includes an **Ed25519 digital signature** guaranteeing creator attribution:
 
-1. **Key Generation & Storage**:
+1. **Key Generation & Machine Vault Isolation**:
    - Keys are generated via Node.js standard cryptographic curve Ed25519.
-   - Private keys are encrypted at rest using machine-bound AES-256-GCM in `.renegadeswarm_security/identity.vault`.
-   - **Anti-Abuse Cooldown**: Enforces a 15-minute regeneration lockout to stop disposable spam identities.
+   - Private keys are stored securely using machine-bound hardware encryption (Electron native OS `safeStorage` via Windows DPAPI, macOS Keychain / Secure Enclave, Linux Secret Service) in the Main process and are never exposed across renderer IPC or network bridges.
+   - **Machine-Bound Anti-Spoofing**: Sealing the vault to the local machine fingerprint prevents key cloning across devices, ensuring malicious actors cannot forge creator identities or sign malicious payloads.
+   - **Anti-Abuse Cooldown**: Enforces a 24-hour regeneration lockout to stop disposable spam identities.
 2. **Trust Tiers**:
    - `VerifiedCreator`: Direct key verification against personal or curated keys (e.g., default verified creator `70fb7e8a57bbec5ffba1d16e317fb915ddeead2a5f3d8853ffb21759155936b7`).
    - `Community`: Known creator in the local keyring with positive endorsements.

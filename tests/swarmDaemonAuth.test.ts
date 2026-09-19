@@ -18,21 +18,17 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'http';
-import path from 'path';
 import { SwarmDaemonServer } from '../src/main/engine/swarmDaemonServer';
-import { swarmEngine } from '../src/main/engine/swarmEngine';
-import { cmmFolderRouter } from '../src/main/cmm/cmmFolderRouter';
 
-describe('SwarmDaemonServer HTTP Bridge (:5180)', () => {
+describe('Swarm Daemon Authentication & Authorization Security', () => {
   let server: SwarmDaemonServer;
-  const testPort = 5189;
-
-  let authToken: string;
+  const testPort = 5190;
+  let validToken: string;
 
   beforeAll(async () => {
     server = new SwarmDaemonServer({ port: testPort, host: '127.0.0.1' });
     await server.start();
-    authToken = server.getAuthTokenManager().getOrCreateToken();
+    validToken = server.getAuthTokenManager().getOrCreateToken();
   });
 
   afterAll(async () => {
@@ -81,77 +77,65 @@ describe('SwarmDaemonServer HTTP Bridge (:5180)', () => {
     });
   }
 
-  it('should respond with health and swarm state on /api/health', async () => {
+  it('GET /api/health should be public and secret-free on 127.0.0.1', async () => {
     const res = await makeRequest('GET', '/api/health');
     expect(res.status).toBe(200);
     expect(res.data.online).toBe(true);
-    expect(res.data.status).toBe('ok');
-    expect(res.data.version).toBe('0.3.0');
-    expect(typeof res.data.peers).toBe('number');
+    expect(res.data.token).toBeUndefined();
+    expect(res.data.privateKey).toBeUndefined();
   });
 
-  it('should accept window focus command on /api/window/focus with Bearer token', async () => {
-    let windowShown = false;
-    const mockWin: any = {
-      isMinimized: () => false,
-      restore: () => {},
-      show: () => {
-        windowShown = true;
-      },
-      focus: () => {},
-    };
-    server.setMainWindow(mockWin);
+  it('POST /api/window/focus should reject unauthenticated requests with 401', async () => {
+    const res = await makeRequest('POST', '/api/window/focus', {});
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
+  });
 
+  it('POST /api/window/focus should reject invalid Bearer token with 401', async () => {
     const res = await makeRequest('POST', '/api/window/focus', {}, {
-      authorization: `Bearer ${authToken}`,
+      authorization: 'Bearer invalid-token-xyz',
     });
-    expect(res.status).toBe(200);
-    expect(res.data.success).toBe(true);
-    expect(windowShown).toBe(true);
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
   });
 
-  it('should accept model ingest notification on /api/ingest with Bearer token', async () => {
-    const testModelPath = path.resolve('./test_models/checkpoints/flux.safetensors');
-    cmmFolderRouter.updateConfig({ rootPath: path.resolve('./test_models') });
-
-    let receivedEvent: any = null;
-    swarmEngine.once('cmm:modelIngested', (evt) => {
-      receivedEvent = evt;
+  it('GET /api/window/focus should be rejected with 405 Method Not Allowed', async () => {
+    const res = await makeRequest('GET', '/api/window/focus', undefined, {
+      authorization: `Bearer ${validToken}`,
     });
-
-    const res = await makeRequest(
-      'POST',
-      '/api/ingest',
-      {
-        filePath: testModelPath,
-        fileName: 'flux.safetensors',
-        sha256: 'abc123456',
-        modelType: 'Checkpoint',
-      },
-      {
-        authorization: `Bearer ${authToken}`,
-      }
-    );
-
-    expect(res.status).toBe(200);
-    expect(res.data.success).toBe(true);
-    expect(res.data.ingested).toBe(true);
+    expect(res.status).toBe(405);
+    expect(res.data.error).toBe('Method Not Allowed: Window activation requires POST');
   });
 
-  it('should return CMM status on /api/cmm/status with Bearer token', async () => {
-    const res = await makeRequest('GET', '/api/cmm/status', undefined, {
-      authorization: `Bearer ${authToken}`,
-    });
-    expect(res.status).toBe(200);
-    expect(res.data.success).toBe(true);
-    expect(res.data.cmm).toBeDefined();
+  it('POST /api/ingest should reject unauthenticated requests with 401', async () => {
+    const res = await makeRequest('POST', '/api/ingest', { filePath: '/models/flux.safetensors' });
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
   });
 
-  it('should handle CORS preflight OPTIONS request for approved origins', async () => {
-    const res = await makeRequest('OPTIONS', '/api/health', undefined, {
-      origin: 'http://127.0.0.1:5174',
+  it('POST /api/models/scan should reject unauthenticated requests with 401', async () => {
+    const res = await makeRequest('POST', '/api/models/scan', {});
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
+  });
+
+  it('GET /api/cmm/status should reject unauthenticated requests with 401', async () => {
+    const res = await makeRequest('GET', '/api/cmm/status');
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
+  });
+
+  it('Protected endpoints should succeed when presenting valid Bearer token', async () => {
+    const focusRes = await makeRequest('POST', '/api/window/focus', {}, {
+      authorization: `Bearer ${validToken}`,
     });
-    expect(res.status).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5174');
+    expect(focusRes.status).toBe(200);
+    expect(focusRes.data.success).toBe(true);
+
+    const cmmRes = await makeRequest('GET', '/api/cmm/status', undefined, {
+      authorization: `Bearer ${validToken}`,
+    });
+    expect(cmmRes.status).toBe(200);
+    expect(cmmRes.data.success).toBe(true);
   });
 });

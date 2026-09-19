@@ -34,6 +34,7 @@ import { bandwidthScheduler } from './bandwidthScheduler';
 import { sharingPolicyManager } from './sharingPolicyManager';
 import { DaemonRpcEngine, daemonRpcEngine, mapDaemonStatus } from './daemonRpcEngine';
 import { contentInspector } from './contentInspector';
+import { syncQueueManager } from './syncQueue';
 
 export class SwarmEngine extends EventEmitter {
   private activeSwarms: Map<string, SwarmTorrentStatus> = new Map();
@@ -51,6 +52,10 @@ export class SwarmEngine extends EventEmitter {
   async init(): Promise<void> {
     if (this.isInitialized) return;
     this.isInitialized = true;
+
+    // Enforce quarantine staging for incomplete BitTorrent downloads
+    await this.daemonRpc.configureQuarantineSession(syncQueueManager.getQuarantineDir()).catch(() => {});
+
     this.pollTimer = setInterval(() => {
       this.pollDaemon().catch((_err) => {
         // Log polling error quietly

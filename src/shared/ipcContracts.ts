@@ -124,6 +124,19 @@ export const UserIdentitySchema = z.object({
   lastRegeneratedAt: z.number().int().positive().optional(),
 });
 
+export const UserIdentityPublicSchema = z.object({
+  creatorName: z.string().min(1).max(100),
+  publicKeyHex: z.string().length(64).regex(/^[0-9a-fA-F]{64}$/, 'Invalid 64-character Ed25519 public key hex'),
+  hasPrivateKey: z.boolean().default(true),
+  vaultStatus: z.enum(['encrypted_os_vault', 'unencrypted_memory_only', 'software_gcm_test']).default('encrypted_os_vault'),
+  createdAt: z.number().int().positive(),
+  lastRegeneratedAt: z.number().int().positive().optional(),
+});
+
+export const UpdateUserAliasRequestSchema = z.object({
+  creatorName: z.string().min(1).max(100),
+});
+
 export const LockoutStatusSchema = z.object({
   canGenerate: z.boolean(),
   lockoutRemainingSeconds: z.number().int().nonnegative(),
@@ -229,6 +242,8 @@ export type CmmSyncConfigRequest = z.infer<typeof CmmSyncConfigRequestSchema>;
 export type ToggleModelShareRequest = z.infer<typeof ToggleModelShareRequestSchema>;
 export type KeyringEntryContract = z.infer<typeof KeyringEntrySchema>;
 export type UserIdentity = z.infer<typeof UserIdentitySchema>;
+export type UserIdentityPublic = z.infer<typeof UserIdentityPublicSchema>;
+export type UpdateUserAliasRequest = z.infer<typeof UpdateUserAliasRequestSchema>;
 export type LockoutStatus = z.infer<typeof LockoutStatusSchema>;
 export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema>;
 export type PreDownloadVerifyRequest = z.infer<typeof PreDownloadVerifyRequestSchema>;

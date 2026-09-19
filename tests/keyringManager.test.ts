@@ -43,7 +43,13 @@ describe('KeyringManager & User Identity Tests', () => {
     const identity = manager.generateNewIdentity('TheStygianRenegade');
     expect(identity.creatorName).toBe('TheStygianRenegade');
     expect(identity.publicKeyHex).toHaveLength(64);
-    expect(identity.privateKeyHex).toHaveLength(64);
+    expect(identity.hasPrivateKey).toBe(true);
+    expect((identity as any).privateKeyHex).toBeUndefined();
+
+    // Verify internal main-process identity holds private key
+    const internalIdentity = manager.getInternalUserIdentity();
+    expect(internalIdentity).toBeDefined();
+    expect(internalIdentity?.privateKeyHex).toHaveLength(64);
 
     // Reload manager from the same directory to verify persistence
     const manager2 = new KeyringManager(testDir);
@@ -51,7 +57,11 @@ describe('KeyringManager & User Identity Tests', () => {
     expect(loaded).toBeDefined();
     expect(loaded?.creatorName).toBe('TheStygianRenegade');
     expect(loaded?.publicKeyHex).toBe(identity.publicKeyHex);
-    expect(loaded?.privateKeyHex).toBe(identity.privateKeyHex);
+    expect(loaded?.hasPrivateKey).toBe(true);
+    expect((loaded as any).privateKeyHex).toBeUndefined();
+
+    const loadedInternal = manager2.getInternalUserIdentity();
+    expect(loadedInternal?.privateKeyHex).toBe(internalIdentity?.privateKeyHex);
   });
 
   it('should add, list, remove, and persist trusted creator keys in keyring', () => {
@@ -88,19 +98,21 @@ describe('KeyringManager & User Identity Tests', () => {
   it('should encrypt private key at rest using machine-bound AES-256-GCM', () => {
     const manager = new KeyringManager(testDir);
     const identity = manager.generateNewIdentity('SecureCreator');
+    const internalIdentity = manager.getInternalUserIdentity()!;
 
     // Read the raw json on disk
     const rawDisk = fs.readFileSync(path.join(testDir, 'user_identity.json'), 'utf-8');
     const parsedDisk = JSON.parse(rawDisk);
 
-    // Verify it is NOT plaintext on disk, but has mb_gcm: prefix
-    expect(parsedDisk.privateKeyHex).toMatch(/^mb_gcm:/);
-    expect(parsedDisk.privateKeyHex).not.toBe(identity.privateKeyHex);
+    // Verify it is NOT plaintext on disk, but has mb_gcm: or os_vault: prefix in privateKeyEncrypted
+    expect(parsedDisk.privateKeyEncrypted).toBeDefined();
+    expect(parsedDisk.privateKeyEncrypted).toMatch(/^(mb_gcm|os_vault|safeStorage):/);
+    expect(parsedDisk.privateKeyHex).toBeUndefined();
 
     // Verify when loaded by another manager instance, it decrypts seamlessly
     const manager2 = new KeyringManager(testDir);
-    const loaded = manager2.getUserIdentity();
-    expect(loaded?.privateKeyHex).toBe(identity.privateKeyHex);
+    const loadedInternal = manager2.getInternalUserIdentity();
+    expect(loadedInternal?.privateKeyHex).toBe(internalIdentity.privateKeyHex);
   });
 
   it('should enforce anti-abuse lockout period on key regeneration', () => {

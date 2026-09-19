@@ -20,6 +20,8 @@ import http from 'http';
 import { BrowserWindow } from 'electron';
 import { swarmEngine } from './swarmEngine';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
+import { cmmFolderRouter } from '../cmm/cmmFolderRouter';
+import { DaemonAuthTokenManager, daemonAuthTokenManager } from './daemonAuthToken';
 
 export interface SwarmDaemonServerConfig {
   port?: number;
@@ -31,14 +33,20 @@ export class SwarmDaemonServer {
   private mainWindow: BrowserWindow | null = null;
   private port: number;
   private host: string;
+  private tokenManager: DaemonAuthTokenManager;
 
-  constructor(config?: SwarmDaemonServerConfig) {
+  constructor(config?: SwarmDaemonServerConfig, tokenManager: DaemonAuthTokenManager = daemonAuthTokenManager) {
     this.port = config?.port || parseInt(process.env.SWARM_DAEMON_PORT || '', 10) || 5180;
     this.host = config?.host || '127.0.0.1';
+    this.tokenManager = tokenManager;
   }
 
   public setMainWindow(win: BrowserWindow | null) {
     this.mainWindow = win;
+  }
+
+  public getTokenManager(): DaemonAuthTokenManager {
+    return this.tokenManager;
   }
 
   public start(): Promise<number> {
@@ -84,6 +92,11 @@ export class SwarmDaemonServer {
     );
   }
 
+  private isAuthorized(req: http.IncomingMessage): boolean {
+    const authHeader = (req.headers['authorization'] || req.headers['x-swarm-auth-token']) as string | undefined;
+    return this.tokenManager.verifyBearerToken(authHeader);
+  }
+
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     const remoteAddr = req.socket.remoteAddress;
 
@@ -110,7 +123,7 @@ export class SwarmDaemonServer {
     if (origin && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Swarm-Auth-Token, Accept');
     }
 
     if (req.method === 'OPTIONS') {
@@ -122,13 +135,13 @@ export class SwarmDaemonServer {
     const parsedUrl = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
     const pathname = parsedUrl.pathname;
 
-    // Helper to read JSON request body
+    // Helper to read JSON request body with 1MB stream cap (CWE-400)
     const getBody = (): Promise<any> => {
       return new Promise((resolve) => {
         let raw = '';
         req.on('data', (chunk) => {
           raw += chunk;
-          if (raw.length > 1024 * 1024) req.destroy(); // 1MB body limit
+          if (raw.length > 1024 * 1024) req.destroy();
         });
         req.on('end', () => {
           try {
@@ -140,7 +153,7 @@ export class SwarmDaemonServer {
       });
     };
 
-    // Route 1: Health & Telemetry Check
+    // Route 1: Health & Telemetry Check (Public on 127.0.0.1 - Zero Secrets Exposed)
     if (
       (pathname === '/api/health' || pathname === '/health' || pathname === '/api/status') &&
       req.method === 'GET'
@@ -167,26 +180,43 @@ export class SwarmDaemonServer {
       return;
     }
 
-    // Route 2: Native Window Focus / Activation
-    if (
-      (pathname === '/api/window/focus' || pathname === '/api/focus') &&
-      (req.method === 'POST' || req.method === 'GET')
-    ) {
-      if (this.mainWindow) {
-        if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-        this.mainWindow.show();
-        this.mainWindow.focus();
+    // Route 2: Native Window Focus / Activation (POST-Only, Protected by Bearer Token)
+    if (pathname === '/api/window/focus' || pathname === '/api/focus') {
+      if (req.method === 'GET') {
+        res.writeHead(405, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Method Not Allowed: Window activation requires POST' }));
+        return;
       }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Window activated' }));
-      return;
+
+      if (req.method === 'POST') {
+        if (!this.isAuthorized(req)) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Unauthorized: Valid Bearer token required' }));
+          return;
+        }
+
+        if (this.mainWindow) {
+          if (this.mainWindow.isMinimized()) this.mainWindow.restore();
+          this.mainWindow.show();
+          this.mainWindow.focus();
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Window activated' }));
+        return;
+      }
     }
 
-    // Route 3: Model Ingest Notification (Dispatched when CMM finishes a download)
+    // Route 3: Model Ingest Notification (POST-Only, Protected by Bearer Token)
     if (
       (pathname === '/api/ingest' || pathname === '/api/models/scan') &&
       req.method === 'POST'
     ) {
+      if (!this.isAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Valid Bearer token required' }));
+        return;
+      }
+
       getBody().then((body) => {
         const filePath = body.filePath;
         if (!filePath || typeof filePath !== 'string') {
@@ -195,7 +225,14 @@ export class SwarmDaemonServer {
           return;
         }
 
-        // Trigger ingest in swarmEngine
+        // Validate path confinement
+        if (!cmmFolderRouter.isPathAllowed(filePath)) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Path confinement violation: File path is not within configured model roots' }));
+          return;
+        }
+
+        // Trigger ingest in swarmEngine (Safe staging without auto-opt-in)
         try {
           swarmEngine.ingestDownloadedModel(filePath, body);
         } catch {}
@@ -206,8 +243,14 @@ export class SwarmDaemonServer {
       return;
     }
 
-    // Route 4: CMM Database Bridge Status
+    // Route 4: CMM Database Bridge Status (Protected by Bearer Token - Prevents Path Leakage)
     if (pathname === '/api/cmm/status' && req.method === 'GET') {
+      if (!this.isAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Valid Bearer token required' }));
+        return;
+      }
+
       cmmDbBridge.checkCmmStatus().then((cmmStatus) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, cmm: cmmStatus }));
@@ -218,6 +261,10 @@ export class SwarmDaemonServer {
     // 404 Fallback
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Endpoint not found', path: pathname }));
+  }
+
+  getAuthTokenManager(): DaemonAuthTokenManager {
+    return this.tokenManager;
   }
 }
 

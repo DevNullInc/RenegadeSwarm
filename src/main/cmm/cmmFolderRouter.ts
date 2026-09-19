@@ -18,6 +18,7 @@
 
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import {
   ModelType,
   FileType,
@@ -54,6 +55,7 @@ export function normalizeFolderPath(dirPath: string): string {
 
 export class CmmFolderRouter {
   private config: FolderRouterConfig;
+  private sessionDialogPaths: Set<string> = new Set();
 
   constructor(config?: Partial<FolderRouterConfig>) {
     this.config = {
@@ -84,6 +86,84 @@ export class CmmFolderRouter {
     if (newConfig.rootPath && !this.config.defaultDownloadFolder) {
       this.config.defaultDownloadFolder = newConfig.rootPath;
     }
+  }
+
+  /**
+   * Registers a path selected by the user via native Electron dialog in the active session.
+   */
+  recordSessionDialogPath(selectedPath: string): void {
+    if (!selectedPath) return;
+    const norm = normalizeFolderPath(selectedPath);
+    this.sessionDialogPaths.add(norm.toLowerCase());
+  }
+
+  /**
+   * Fail-closed path confinement check.
+   * Verifies that a target path resides inside configured model roots, discovered CMM folders,
+   * or paths explicitly chosen via native dialog during this session.
+   */
+  isPathAllowed(candidatePath: string): boolean {
+    if (!candidatePath || typeof candidatePath !== 'string') {
+      return false;
+    }
+
+    if (candidatePath.includes('\0')) {
+      return false;
+    }
+
+    const normCandidate = path.resolve(candidatePath);
+    const normCandidateLower = normCandidate.toLowerCase();
+
+    // Reject OS system directories
+    const sysRoots = [
+      'c:\\windows',
+      'c:\\program files',
+      'c:\\program files (x86)',
+      'c:\\system volume information',
+      '/etc',
+      '/usr',
+      '/bin',
+      '/sbin',
+      '/var',
+      '/boot',
+      '/root',
+    ];
+
+    for (const sr of sysRoots) {
+      if (normCandidateLower === sr || normCandidateLower.startsWith(sr + path.sep)) {
+        return false;
+      }
+    }
+
+    // Check against session dialog paths
+    for (const sdp of this.sessionDialogPaths) {
+      if (normCandidateLower === sdp || normCandidateLower.startsWith(sdp + path.sep)) {
+        return true;
+      }
+    }
+
+    // Check against configured roots
+    const allowedRoots: string[] = [];
+    if (this.config.rootPath) allowedRoots.push(normalizeFolderPath(this.config.rootPath));
+    if (this.config.defaultDownloadFolder) allowedRoots.push(normalizeFolderPath(this.config.defaultDownloadFolder));
+    for (const f of this.config.cmmFolders) allowedRoots.push(normalizeFolderPath(f));
+    for (const f of this.config.customFolders) allowedRoots.push(normalizeFolderPath(f));
+
+    // Also permit standard temporary or quarantine directory
+    const tempDir = path.resolve(os.tmpdir()).toLowerCase();
+    if (normCandidateLower === tempDir || normCandidateLower.startsWith(tempDir + path.sep)) {
+      return true;
+    }
+
+    for (const root of allowedRoots) {
+      if (!root) continue;
+      const normRootLower = root.toLowerCase();
+      if (normCandidateLower === normRootLower || normCandidateLower.startsWith(normRootLower + path.sep)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**

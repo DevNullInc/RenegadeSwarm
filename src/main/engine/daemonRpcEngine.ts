@@ -252,6 +252,22 @@ export class DaemonRpcEngine extends EventEmitter {
     const res = await this.executeRpc('session-set', args);
     return res.result === 'success';
   }
+
+  /**
+   * Configures Transmission session to hold all incomplete/in-progress downloads
+   * in the secure quarantine directory prior to hash verification and promotion.
+   */
+  async configureQuarantineSession(quarantineDir: string): Promise<boolean> {
+    try {
+      const res = await this.executeRpc('session-set', {
+        'incomplete-dir': quarantineDir,
+        'incomplete-dir-enabled': true,
+      });
+      return res && res.result === 'success';
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const daemonRpcEngine = new DaemonRpcEngine();

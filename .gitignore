@@ -42,3 +42,8 @@ scripts/bump-version.js
 scripts/update-version.js
 bump-version.*
 update-version.*
+
+# Security credentials & local daemon tokens
+daemon.token
+*.token
+.renegadeswarm_security/

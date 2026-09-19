@@ -29,8 +29,6 @@ import {
   Download,
   Upload,
   RefreshCw,
-  Eye,
-  EyeOff,
   FolderCog,
   Sliders,
   AlertTriangle,
@@ -44,7 +42,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { KeyringEntry, TrustLevel } from '../../protocol/keyring';
-import { UserIdentity, LockoutStatus, ModelFolderEntry } from '../../shared/ipcContracts';
+import { UserIdentityPublic, LockoutStatus, ModelFolderEntry } from '../../shared/ipcContracts';
 import { SharingPolicySettings } from '../../protocol/sharingPolicy';
 
 interface SettingsViewProps {
@@ -63,9 +61,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 }) => {
   const [activeSection, setActiveSection] = useState<'keyring' | 'identity' | 'paths' | 'privacy'>('keyring');
   const [keyringEntries, setKeyringEntries] = useState<KeyringEntry[]>([]);
-  const [userIdentity, setUserIdentity] = useState<UserIdentity | null>(null);
+  const [userIdentity, setUserIdentity] = useState<UserIdentityPublic | null>(null);
   const [lockoutStatus, setLockoutStatus] = useState<LockoutStatus | null>(null);
-  const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -204,6 +201,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         setTimeout(() => setStatusMsg(null), 4000);
       } else {
         alert(res.error || 'Failed to generate identity');
+      }
+    } catch (err: any) {
+      setStatusMsg({ text: err.message, type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateAlias = async () => {
+    if (!window.renegadeSwarm?.updateUserAlias) return;
+    const name = creatorHandleInput.trim();
+    if (!name) {
+      alert('Creator handle cannot be empty.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await window.renegadeSwarm.updateUserAlias({ creatorName: name });
+      if (res.success && res.data) {
+        setUserIdentity(res.data);
+        setStatusMsg({ text: `Updated creator alias to @${res.data.creatorName}`, type: 'success' });
+        setTimeout(() => setStatusMsg(null), 3500);
+      } else {
+        alert(res.error || 'Failed to update creator alias');
       }
     } catch (err: any) {
       setStatusMsg({ text: err.message, type: 'error' });
@@ -794,11 +815,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <AlertTriangle size={22} color="#f97316" style={{ flexShrink: 0, marginTop: '2px' }} />
               <div>
                 <h4 style={{ color: '#fb923c', margin: '0 0 4px 0', fontSize: '14px', fontWeight: 700 }}>
-                  Cryptographic Provenance & Private Key Safeguard
+                  Cryptographic Provenance & Machine Vault Isolation
                 </h4>
                 <p style={{ margin: 0, fontSize: '12px', color: '#fed7aa', lineHeight: 1.5 }}>
                   RenegadeSwarm utilizes 32-byte <strong>Ed25519</strong> digital signatures to bind creator identity directly to model files and BitTorrent info hashes.
-                  Never share or commit your <strong>Private Key</strong>. Anyone possessing your private key can publish and sign model manifests under your name.
+                  Your private key is protected by the operating system secure enclave / safeStorage in the Main process and is never exposed across renderer IPC or network bridges.
                 </p>
               </div>
             </div>
@@ -834,10 +855,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700 }}>@{userIdentity.creatorName}</h3>
                         <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', fontWeight: 600 }}>
-                          Active Signing Key
+                          Active Signing Identity
                         </span>
-                        <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', fontWeight: 600 }}>
-                          Machine-Bound AES-256-GCM
+                        <span style={{
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          background: userIdentity.vaultStatus === 'unencrypted_memory_only' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.15)',
+                          color: userIdentity.vaultStatus === 'unencrypted_memory_only' ? '#f59e0b' : '#38bdf8',
+                          fontWeight: 600,
+                        }}>
+                          {userIdentity.vaultStatus === 'unencrypted_memory_only' ? 'In-Memory Only (Vault Unavailable)' : 'OS SafeStorage Encrypted Vault'}
                         </span>
                       </div>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -909,6 +937,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 )}
 
+                {/* Update Alias Section */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={creatorHandleInput}
+                    onChange={(e) => setCreatorHandleInput(e.target.value)}
+                    placeholder="Update creator handle..."
+                    style={{
+                      flex: 1,
+                      background: '#0d1117',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '8px',
+                      padding: '8px 12px',
+                      fontSize: '12px',
+                      color: 'var(--text-main)',
+                      outline: 'none',
+                    }}
+                  />
+                  <button
+                    onClick={handleUpdateAlias}
+                    disabled={loading || !creatorHandleInput.trim() || creatorHandleInput.trim() === userIdentity.creatorName}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border-subtle)',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Update Alias
+                  </button>
+                </div>
+
                 {/* Public Key Display */}
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
@@ -951,64 +1015,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Private Key Display */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <label style={{ fontSize: '12px', fontWeight: 600, color: '#f87171' }}>
-                      Private Key (Confidential Signing Seed):
-                    </label>
-                    <button
-                      onClick={() => setShowPrivateKey(!showPrivateKey)}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        fontSize: '11px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                      }}
-                    >
-                      {showPrivateKey ? <EyeOff size={13} /> : <Eye size={13} />} {showPrivateKey ? 'Hide Key' : 'Reveal Key'}
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      readOnly
-                      type={showPrivateKey ? 'text' : 'password'}
-                      value={userIdentity.privateKeyHex}
-                      className="mono"
-                      style={{
-                        flex: 1,
-                        background: '#0d1117',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        borderRadius: '8px',
-                        padding: '10px 14px',
-                        fontSize: '12px',
-                        color: '#f87171',
-                        outline: 'none',
-                      }}
-                    />
-                    <button
-                      onClick={() => handleCopy(userIdentity.privateKeyHex, 'privkey')}
-                      style={{
-                        padding: '10px 16px',
-                        borderRadius: '8px',
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        color: '#f87171',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        fontWeight: 600,
-                        fontSize: '12px',
-                      }}
-                    >
-                      {copiedField === 'privkey' ? <Check size={14} /> : <Copy size={14} />} Copy Private Key
-                    </button>
-                  </div>
+                {/* Security Vault Status Information */}
+                <div style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: 'rgba(16, 185, 129, 0.06)',
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  fontSize: '12px',
+                  color: '#6ee7b7',
+                }}>
+                  <ShieldCheck size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    <strong>Zero-Exposure Private Key Security:</strong> Your Ed25519 private signing key is stored in the Electron Main process OS-level encrypted vault and is never exposed to the UI renderer or remote callers.
+                  </span>
                 </div>
               </div>
             ) : (
