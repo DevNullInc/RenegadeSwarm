@@ -18,7 +18,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PreDownloadVerifier } from '../src/main/engine/preDownloadVerifier';
-import { keyringManager } from '../src/main/engine/keyringManager';
+import { KeyringManager } from '../src/main/engine/keyringManager';
 import { generateEd25519KeyPair, signSwarmManifest } from '../src/protocol/crypto';
 import fs from 'fs';
 import path from 'path';
@@ -26,12 +26,16 @@ import os from 'os';
 
 describe('PreDownloadVerifier Engine', () => {
   let verifier: PreDownloadVerifier;
+  let testKeyringManager: KeyringManager;
   let tmpDir: string;
 
   beforeAll(() => {
-    verifier = new PreDownloadVerifier();
     tmpDir = path.join(os.tmpdir(), 'test_predownload_' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
+    const securityDir = path.join(tmpDir, 'security');
+    fs.mkdirSync(securityDir, { recursive: true });
+    testKeyringManager = new KeyringManager(securityDir);
+    verifier = new PreDownloadVerifier(testKeyringManager);
   });
 
   afterAll(() => {
@@ -120,7 +124,7 @@ describe('PreDownloadVerifier Engine', () => {
     const keypair = generateEd25519KeyPair();
 
     // Add creator to local keyring as VerifiedCreator
-    keyringManager.addEntry({
+    testKeyringManager.addEntry({
       creatorName: 'TrustedCustomCreator',
       publicKeyHex: keypair.publicKeyHex,
       trustLevel: 'VerifiedCreator',
@@ -174,7 +178,7 @@ describe('PreDownloadVerifier Engine', () => {
     const keypair = generateEd25519KeyPair();
 
     // Add creator as Blocked in local keyring
-    keyringManager.addEntry({
+    testKeyringManager.addEntry({
       creatorName: 'MaliciousActor',
       publicKeyHex: keypair.publicKeyHex,
       trustLevel: 'Blocked',

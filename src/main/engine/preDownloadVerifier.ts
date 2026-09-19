@@ -21,11 +21,16 @@ import path from 'path';
 import { SwarmManifest } from '../../protocol/types';
 import { verifySwarmManifestSignature } from '../../protocol/crypto';
 import { sanitizeAndDecodeHtml } from '../metadata/modelMetadataExtractor';
-import { keyringManager } from './keyringManager';
+import { KeyringManager, keyringManager } from './keyringManager';
 import { PreDownloadVerificationResult, PreDownloadVerifyRequest } from '../../shared/ipcContracts';
 import { ALLOWED_MODEL_EXTENSIONS } from '../../shared/cmmTypes';
 
 export class PreDownloadVerifier {
+  private keyringManager: KeyringManager;
+
+  constructor(keyringManagerInstance: KeyringManager = keyringManager) {
+    this.keyringManager = keyringManagerInstance;
+  }
   /**
    * Performs pre-download verification against CivitAI, HuggingFace,
    * or the Custom Model Verifier (for unindexed/custom LoRAs, fine-tunes, checkpoints, GGUFs).
@@ -307,7 +312,7 @@ export class PreDownloadVerifier {
       }
 
       // Check against local keyring Web of Trust
-      const keyEntry = keyringManager.verifyCreator(creator, manifest.signature.publicKey);
+      const keyEntry = this.keyringManager.verifyCreator(creator, manifest.signature.publicKey);
       if (keyEntry.isKnown) {
         trustLevel = keyEntry.trustLevel;
         if (keyEntry.trustLevel === 'VerifiedCreator') {
