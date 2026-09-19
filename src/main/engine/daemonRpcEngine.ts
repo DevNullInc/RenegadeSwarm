@@ -18,6 +18,7 @@
 
 import http from 'http';
 import { EventEmitter } from 'events';
+import { SwarmTorrentStatus } from '../../protocol/types';
 
 export interface DaemonConfig {
   host: string;
@@ -25,13 +26,14 @@ export interface DaemonConfig {
   username?: string;
   password?: string;
   rpcPath: string;
+  timeoutMs?: number;
 }
 
 export interface DaemonTorrentInfo {
   id: number;
   name: string;
   hashString: string;
-  status: number; // 0=stopped, 4=downloading, 6=seeding
+  status: number; // 0=stopped, 1=check_wait, 2=check, 3=download_wait, 4=download, 5=seed_wait, 6=seed
   percentDone: number;
   rateDownload: number;
   rateUpload: number;
@@ -40,7 +42,35 @@ export interface DaemonTorrentInfo {
   peersGettingFromUs: number;
   uploadRatio: number;
   downloadDir: string;
+  totalSize?: number;
+  sizeWhenDone?: number;
+  leftUntilDone?: number;
+  eta?: number;
   errorString?: string;
+}
+
+/**
+ * Maps Transmission / rqbit daemon integer status codes to RenegadeSwarm torrent states.
+ */
+export function mapDaemonStatus(status: number): SwarmTorrentStatus['state'] {
+  switch (status) {
+    case 0:
+      return 'paused'; // TR_STATUS_STOPPED
+    case 1:
+      return 'queued'; // TR_STATUS_CHECK_WAIT
+    case 2:
+      return 'verifying'; // TR_STATUS_CHECK
+    case 3:
+      return 'queued'; // TR_STATUS_DOWNLOAD_WAIT
+    case 4:
+      return 'downloading'; // TR_STATUS_DOWNLOAD
+    case 5:
+      return 'queued'; // TR_STATUS_SEED_WAIT
+    case 6:
+      return 'seeding'; // TR_STATUS_SEED
+    default:
+      return 'downloading';
+  }
 }
 
 export class DaemonRpcEngine extends EventEmitter {
@@ -53,8 +83,21 @@ export class DaemonRpcEngine extends EventEmitter {
       host: '127.0.0.1',
       port: 9091,
       rpcPath: '/transmission/rpc',
+      timeoutMs: 5000,
       ...(config || {}),
     };
+  }
+
+  /**
+   * Health check to confirm local BitTorrent daemon (Transmission / rqbit) is responsive.
+   */
+  async checkHealth(): Promise<boolean> {
+    try {
+      const res = await this.executeRpc('session-get');
+      return res && res.result === 'success';
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -85,6 +128,7 @@ export class DaemonRpcEngine extends EventEmitter {
         path: this.config.rpcPath,
         method: 'POST',
         headers,
+        timeout: this.config.timeoutMs || 5000,
       };
 
       const req = http.request(options, (res) => {
@@ -92,7 +136,7 @@ export class DaemonRpcEngine extends EventEmitter {
         if (res.statusCode === 409 && res.headers['x-transmission-session-id']) {
           this.sessionId = res.headers['x-transmission-session-id'] as string;
           // Retry with acquired session token
-          return resolve(this.executeRpc(method, args));
+          return resolve(this.executeRpc<T>(method, args));
         }
 
         let body = '';
@@ -107,6 +151,10 @@ export class DaemonRpcEngine extends EventEmitter {
         });
       });
 
+      req.on('timeout', () => {
+        req.destroy(new Error('Daemon RPC request timed out'));
+      });
+
       req.on('error', (err) => reject(err));
       req.write(payload);
       req.end();
@@ -119,7 +167,17 @@ export class DaemonRpcEngine extends EventEmitter {
       'download-dir': downloadDir,
       paused: false,
     });
-    const torrent = res.arguments['torrent-added'] || res.arguments['torrent-duplicate'];
+    const torrent = res.arguments?.['torrent-added'] || res.arguments?.['torrent-duplicate'];
+    return torrent?.id || 0;
+  }
+
+  async addTorrentBuffer(buffer: Buffer, downloadDir: string): Promise<number> {
+    const res = await this.executeRpc('torrent-add', {
+      metainfo: buffer.toString('base64'),
+      'download-dir': downloadDir,
+      paused: false,
+    });
+    const torrent = res.arguments?.['torrent-added'] || res.arguments?.['torrent-duplicate'];
     return torrent?.id || 0;
   }
 
@@ -137,6 +195,10 @@ export class DaemonRpcEngine extends EventEmitter {
       'peersGettingFromUs',
       'uploadRatio',
       'downloadDir',
+      'totalSize',
+      'sizeWhenDone',
+      'leftUntilDone',
+      'eta',
       'errorString',
     ];
 

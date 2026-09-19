@@ -7,7 +7,7 @@
 [![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-111%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-124%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -60,6 +60,13 @@ Security is the fundamental pillar of RenegadeSwarm. Because P2P networks allow 
 │    • Direct commit to `renegadecmm.sqlite` via SQLite `ATTACH DATABASE`          │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> [!WARNING]
+> ### Security Notice: PyTorch Weights (`.pt` / `.bin` / `.ckpt`) vs SafeTensors Zero-Trust
+> Legacy PyTorch checkpoints (`.pt`, `.pth`, `.bin`, `.ckpt`) rely on Python `pickle` serialization. When loaded in Python or ComfyUI via standard `torch.load()`, malicious code embedded inside the pickle bytecode stream can execute with the privileges of the Python interpreter.
+> 
+> * **SafeTensors (`.safetensors`) & GGUF (`.gguf`) are Zero-Trust**: These formats contain pure tensor buffers and structured JSON/binary headers with **zero executable opcode capability**.
+> * **RenegadeCMM Built-in Model Conversion Tools**: If you have legacy `.pt` or `.bin` checkpoints, [**RenegadeCMM**](https://github.com/DevNullInc/RenegadeCMM) includes built-in conversion utilities to safely convert PyTorch model weights to SafeTensors. See the [**RenegadeCMM Features Documentation**](https://github.com/DevNullInc/RenegadeCMM/blob/main/docs/FEATURES.md) for details on converting your legacy models.
 
 ### 1. Hardened Process Boundary Isolation
 * **100% Sandboxed Renderer**: The user interface runs strictly within an isolated Webview (`contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`).

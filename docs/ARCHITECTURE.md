@@ -56,10 +56,10 @@ RenegadeSwarm is structured as a layered, modular desktop application composed o
 │    ┌───────────────────────────────────┼───────────────────────────────────┐           │
 │    ▼                                   ▼                                   ▼           │
 │ ┌──────────────────────┐   ┌──────────────────────┐   ┌──────────────────────────────┐ │
-│ │  PeerManager (Mesh)  │   │ PieceStreamEngine    │   │ ContentValidator / Inspector │ │
-│ │  • Choking algorithm │   │ • 16KB sub-blocks    │   │ • Magic-byte validation      │ │
-│ │  • Peer connection   │   │ • Direct disk writes │   │ • Anti-polyglot/executable   │ │
-│ │  • Bitfield tracking │   │ • In-memory SHA256   │   │ • Strict quarantine pipeline │ │
+│ │  DaemonRpcEngine     │   │ PieceStreamEngine    │   │ ContentValidator / Inspector │ │
+│ │  • JSON-RPC sidecar  │   │ • 16KB sub-blocks    │   │ • Magic-byte validation      │ │
+│ │  • Transmission/rqbit│   │ • Direct disk writes │   │ • Anti-polyglot/executable   │ │
+│ │  • CSRF token retry  │   │ • In-memory SHA256   │   │ • Strict quarantine pipeline │ │
 │ └──────────────────────┘   └──────────────────────┘   └──────────────────────────────┘ │
 │    ┌───────────────────────────────────┼───────────────────────────────────┐           │
 │    ▼                                   ▼                                   ▼           │
@@ -70,7 +70,7 @@ RenegadeSwarm is structured as a layered, modular desktop application composed o
 │ │ • Swarm pinning      │   │ • 15-min lockout     │   │ • Model metadata sync        │ │
 │ └──────────────────────┘   └──────────────────────┘   └──────────────────────────────┘ │
 └───────────────────────────────────────────┬────────────────────────────────────────────┘
-                                            │ TCP / UDP (Port 6881)
+                                            │ Local JSON-RPC / TCP / UDP (Port 6881)
                                             ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
 │                              DECENTRALIZED P2P NETWORK                                 │
@@ -469,6 +469,14 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 - **Prohibited Signatures**: Instantly rejects files containing Windows PE headers (`MZ`), Linux ELF (`\x7fELF`), Mach-O binaries, ZIP archive headers (`PK\x03\x04`), or shell scripts (`#!`).
 - **SafeTensors Header Validation**: Reads the 8-byte uint64 header size, validates JSON schema bounds (<25MB), and verifies that tensor offsets align with overall file size.
 
+### PyTorch Pickle Execution Risk vs SafeTensors Zero-Trust
+
+> [!WARNING]
+> **PyTorch Weights (.pt / .bin / .ckpt) Pickle Risk**: Legacy PyTorch checkpoints rely on Python `pickle` serialization. When loaded in Python or ComfyUI environments via `torch.load()`, malicious code embedded in the pickle opcode stream can execute arbitrary system commands.
+> 
+> * **Zero-Trust Formats**: **SafeTensors (`.safetensors`)** and **GGUF (`.gguf`)** are strictly structured data files containing tensor arrays and JSON/binary headers with **no executable bytecode capability**.
+> * **RenegadeCMM Built-in Model Conversion Tools**: For legacy PyTorch models, [**RenegadeCMM**](https://github.com/DevNullInc/RenegadeCMM) features built-in conversion utilities to safely transform `.pt` and `.bin` weights into zero-trust SafeTensors format. See the [**RenegadeCMM Features Documentation**](https://github.com/DevNullInc/RenegadeCMM/blob/main/docs/FEATURES.md) for full instructions.
+
 ---
 
 ## 8. Codebase Component Map
@@ -476,6 +484,7 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 | Path | Primary Responsibility |
 |---|---|
 | [`src/main/engine/swarmEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/swarmEngine.ts) | Central swarm orchestrator; manages active downloads, seeding, and bandwidth loop. |
+| [`src/main/engine/daemonRpcEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/daemonRpcEngine.ts) | JSON-RPC client for local BitTorrent daemon (Transmission / rqbit sidecar) with CSRF 409 session handshake negotiation. |
 | [`src/main/engine/packageJobManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/packageJobManager.ts) | Persistent background packaging job manager with phase state machine, chunk progress streaming, and tab-switching persistence. |
 | [`src/main/engine/discoveryEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/discoveryEngine.ts) | BEP 10 P2P model discovery aggregator, peer query broadcaster, and Web of Trust scorer. |
 | [`src/main/engine/preDownloadVerifier.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/preDownloadVerifier.ts) | Multi-registry hash verifier (CivitAI, HuggingFace) and custom model Ed25519 signature validator. |
