@@ -68,8 +68,55 @@ export class SwarmDaemonServer {
 
       this.server.listen(this.port, this.host, () => {
         console.info(`[SwarmDaemonServer] Listening on http://${this.host}:${this.port}`);
+        // Fire one non-blocking wakeup ping to sister daemon (CMM on :5174) with 400ms timeout
+        this.sendSisterWakeup().catch(() => {});
         resolve(this.port);
       });
+    });
+  }
+
+  /**
+   * Fires a single non-blocking wakeup ping to sister CMM daemon if running.
+   * Single attempt, 400ms timeout, swallows errors (no retry loop).
+   */
+  public async sendSisterWakeup(targetPort: number = 5174): Promise<boolean> {
+    const token = this.tokenManager.getOrCreateToken();
+    const payload = JSON.stringify({
+      source: 'swarm',
+      ts: Date.now(),
+    });
+
+    return new Promise((resolve) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: targetPort,
+          path: '/api/sister/wakeup',
+          method: 'POST',
+          timeout: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+            'Authorization': `Bearer ${token}`,
+          },
+        },
+        (res) => {
+          res.resume(); // consume response stream
+          resolve(res.statusCode === 200);
+        }
+      );
+
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+
+      req.on('error', () => {
+        resolve(false);
+      });
+
+      req.write(payload);
+      req.end();
     });
   }
 
@@ -254,6 +301,30 @@ export class SwarmDaemonServer {
       cmmDbBridge.checkCmmStatus().then((cmmStatus) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, cmm: cmmStatus }));
+      });
+      return;
+    }
+
+    // Route 5: Sister Wakeup Poke (POST-Only, Protected by Bearer Token)
+    if (pathname === '/api/sister/wakeup' && req.method === 'POST') {
+      if (!this.isAuthorized(req)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized: Valid Bearer token required' }));
+        return;
+      }
+
+      getBody().then((body) => {
+        // Acknowledge wakeup from sister (e.g. CMM)
+        // Notify main window to reset budget and update badge immediately
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.mainWindow.webContents.send('cmm:sisterWakeup', {
+            source: body?.source || 'cmm',
+            ts: body?.ts || Date.now(),
+          });
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Swarm sister wakeup acknowledged' }));
       });
       return;
     }

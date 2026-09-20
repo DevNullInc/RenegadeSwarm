@@ -156,4 +156,69 @@ describe('Sharing Policy & Opt-In Filter (Rule 11 & Privacy Defense)', () => {
     });
     expect(blockedResult.canShare).toBe(false);
   });
+
+  it('rejects sharing if model resides inside an explicit blacklisted directory path (prefix match)', () => {
+    const customPolicy: SharingPolicySettings = {
+      ...DEFAULT_SHARING_POLICY,
+      excludedFolderPatterns: [], // Clear patterns to isolate directory path check
+      excludedDirectoryPaths: ['D:/clients/Acme/final'],
+    };
+
+    // 1. File inside blacklisted hierarchy -> REJECTED
+    const insideCandidate = {
+      id: 'acme_model',
+      filePath: 'D:/clients/Acme/final/subfolder/model.safetensors',
+      fileName: 'model.safetensors',
+      isExplicitlyOptedIn: true,
+    };
+    const insideResult = evaluateModelSharePermission(insideCandidate, customPolicy);
+    expect(insideResult.canShare).toBe(false);
+    expect(insideResult.reason).toContain('blacklisted directory path');
+
+    // 2. File in different folder that happens to contain the name token "final" -> ALLOWED
+    const outsideCandidate = {
+      id: 'other_final',
+      filePath: 'C:/ComfyUI/models/checkpoints/final/model.safetensors',
+      fileName: 'model.safetensors',
+      isExplicitlyOptedIn: true,
+    };
+    const outsideResult = evaluateModelSharePermission(outsideCandidate, customPolicy);
+    expect(outsideResult.canShare).toBe(true);
+
+    // 3. File in parent folder of blacklisted path -> ALLOWED
+    const parentCandidate = {
+      id: 'parent_model',
+      filePath: 'D:/clients/Acme/other/model.safetensors',
+      fileName: 'model.safetensors',
+      isExplicitlyOptedIn: true,
+    };
+    const parentResult = evaluateModelSharePermission(parentCandidate, customPolicy);
+    expect(parentResult.canShare).toBe(true);
+  });
+
+  it('manages directory blacklist additions, removals, and restoration via SharingPolicyManager', () => {
+    const manager = new SharingPolicyManager();
+
+    // Add directory
+    manager.addBlacklistDirectory('D:\\work\\confidential_models');
+    expect(manager.getPolicy().excludedDirectoryPaths).toContain('D:\\work\\confidential_models');
+
+    // Duplicate addition should be idempotent
+    manager.addBlacklistDirectory('D:/work/confidential_models');
+    expect(manager.getPolicy().excludedDirectoryPaths.length).toBe(1);
+
+    // Remove directory
+    manager.removeBlacklistDirectory('D:/work/confidential_models');
+    expect(manager.getPolicy().excludedDirectoryPaths.length).toBe(0);
+
+    // Remove pattern
+    manager.removeBlacklistPattern('drafts');
+    expect(manager.getPolicy().excludedFolderPatterns).not.toContain('drafts');
+
+    // Restore defaults
+    manager.addBlacklistDirectory('C:/test/path');
+    manager.restoreDefaultBlacklist();
+    expect(manager.getPolicy().excludedFolderPatterns).toContain('drafts');
+    expect(manager.getPolicy().excludedDirectoryPaths.length).toBe(0);
+  });
 });

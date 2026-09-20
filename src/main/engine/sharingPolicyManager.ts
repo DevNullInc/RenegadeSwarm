@@ -48,6 +48,41 @@ export class SharingPolicyManager {
     return this.getPolicy();
   }
 
+  addBlacklistDirectory(dirPath: string): SharingPolicySettings {
+    const normalized = dirPath.trim();
+    if (!normalized) return this.getPolicy();
+
+    const currentDirs = this.policy.excludedDirectoryPaths || [];
+    const normalizedLower = normalized.toLowerCase().replace(/\\/g, '/');
+    const alreadyExists = currentDirs.some((d) => d.toLowerCase().replace(/\\/g, '/') === normalizedLower);
+    if (!alreadyExists) {
+      this.policy.excludedDirectoryPaths = [...currentDirs, normalized];
+    }
+    return this.getPolicy();
+  }
+
+  removeBlacklistDirectory(dirPath: string): SharingPolicySettings {
+    const normalizedLower = dirPath.trim().toLowerCase().replace(/\\/g, '/');
+    this.policy.excludedDirectoryPaths = (this.policy.excludedDirectoryPaths || []).filter(
+      (d) => d.toLowerCase().replace(/\\/g, '/') !== normalizedLower
+    );
+    return this.getPolicy();
+  }
+
+  removeBlacklistPattern(pattern: string): SharingPolicySettings {
+    const normalizedLower = pattern.trim().toLowerCase();
+    this.policy.excludedFolderPatterns = this.policy.excludedFolderPatterns.filter(
+      (p) => p.toLowerCase() !== normalizedLower
+    );
+    return this.getPolicy();
+  }
+
+  restoreDefaultBlacklist(): SharingPolicySettings {
+    this.policy.excludedFolderPatterns = [...DEFAULT_SHARING_POLICY.excludedFolderPatterns];
+    this.policy.excludedDirectoryPaths = [];
+    return this.getPolicy();
+  }
+
   toggleModelOptIn(modelId: string, optIn: boolean): boolean {
     const id = modelId.trim();
     if (!id) return false;

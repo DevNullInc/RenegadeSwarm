@@ -40,6 +40,7 @@ import {
   Trash2,
   HardDrive,
   CheckCircle2,
+  RotateCcw,
 } from 'lucide-react';
 import { KeyringEntry, TrustLevel } from '../../protocol/keyring';
 import { UserIdentityPublic, LockoutStatus, ModelFolderEntry } from '../../shared/ipcContracts';
@@ -390,6 +391,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         setModelFolders(res.data.folders || []);
         setStatusMsg({ text: `Set default download location to: ${folderPath}`, type: 'success' });
         setTimeout(() => setStatusMsg(null), 3000);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleAddBlacklistedFolder = async () => {
+    if (!window.renegadeSwarm?.addBlacklistDirectory) return;
+    try {
+      const res = await window.renegadeSwarm.addBlacklistDirectory();
+      if (res.success && res.data) {
+        await onUpdateSharingPolicy(res.data);
+        setStatusMsg({ text: 'Added directory to privacy blacklist.', type: 'success' });
+        setTimeout(() => setStatusMsg(null), 3500);
+      } else if (res.error && res.error !== 'Directory selection canceled') {
+        alert(res.error);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to add blacklisted directory');
+    }
+  };
+
+  const handleRemoveBlacklistedFolder = async (dirPath: string) => {
+    if (!window.renegadeSwarm?.removeBlacklistDirectory) return;
+    try {
+      const res = await window.renegadeSwarm.removeBlacklistDirectory(dirPath);
+      if (res.success && res.data) {
+        await onUpdateSharingPolicy(res.data);
+        setStatusMsg({ text: `Removed directory "${dirPath}" from blacklist.`, type: 'info' });
+        setTimeout(() => setStatusMsg(null), 3000);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleRemoveBlacklistPattern = async (pattern: string) => {
+    if (!window.renegadeSwarm?.removeBlacklistPattern) return;
+    try {
+      const res = await window.renegadeSwarm.removeBlacklistPattern(pattern);
+      if (res.success && res.data) {
+        await onUpdateSharingPolicy(res.data);
+        setStatusMsg({ text: `Removed pattern "/${pattern}/" from blacklist.`, type: 'info' });
+        setTimeout(() => setStatusMsg(null), 3000);
+      }
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleRestoreDefaultBlacklist = async () => {
+    if (!window.renegadeSwarm?.restoreDefaultBlacklist) return;
+    try {
+      const res = await window.renegadeSwarm.restoreDefaultBlacklist();
+      if (res.success && res.data) {
+        await onUpdateSharingPolicy(res.data);
+        setStatusMsg({ text: 'Restored default privacy blacklist patterns.', type: 'success' });
+        setTimeout(() => setStatusMsg(null), 3500);
       }
     } catch (err: any) {
       alert(err.message);
@@ -1474,28 +1533,274 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 />
               </div>
 
-              {/* Blacklisted Folders */}
-              <div>
-                <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>
-                  Blacklisted Directory Name Patterns (Never Seeded):
-                </label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {sharingPolicy.excludedFolderPatterns.map((folder: string) => (
-                    <span
-                      key={folder}
-                      style={{
-                        padding: '4px 10px',
+              {/* Blacklisted Folders & Directory Exclusions */}
+              <div style={{
+                padding: '20px',
+                background: 'rgba(0, 0, 0, 0.25)',
+                borderRadius: '12px',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Folder style={{ width: '16px', height: '16px', color: '#f87171' }} />
+                      <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>
+                        Privacy Blacklists & Directory Exclusions
+                      </h4>
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
                         background: 'rgba(239, 68, 68, 0.15)',
                         color: '#f87171',
                         border: '1px solid rgba(239, 68, 68, 0.3)',
-                        borderRadius: '6px',
+                        fontWeight: 600,
+                      }}>
+                        {(sharingPolicy.excludedFolderPatterns?.length || 0) + (sharingPolicy.excludedDirectoryPaths?.length || 0)} Excluded
+                      </span>
+                    </div>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: 'var(--text-muted)', maxWidth: '560px' }}>
+                      Models located inside matching name patterns or chosen local directory paths will never be indexed, announced, or seeded to the swarm.
+                    </p>
+                  </div>
+
+                  {/* Actions: Add Folder (strictly main-process file dialog) & Restore Defaults */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={handleRestoreDefaultBlacklist}
+                      title="Reset blacklist back to recommended default pattern rules"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '8px',
                         fontSize: '12px',
-                        fontFamily: 'monospace',
+                        fontWeight: 600,
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: 'var(--text-secondary)',
+                        border: '1px solid var(--border-subtle)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.color = 'var(--text-main)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                        e.currentTarget.style.color = 'var(--text-secondary)';
                       }}
                     >
-                      /{folder}/
+                      <RotateCcw style={{ width: '13px', height: '13px' }} />
+                      Restore Defaults
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleAddBlacklistedFolder}
+                      title="Select a directory to add to the privacy blacklist using file browser dialog"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 14px',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        background: 'rgba(239, 68, 68, 0.15)',
+                        color: '#fca5a5',
+                        border: '1px solid rgba(239, 68, 68, 0.35)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                        e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+                        e.currentTarget.style.color = '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)';
+                        e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                        e.currentTarget.style.color = '#fca5a5';
+                      }}
+                    >
+                      <FolderPlus style={{ width: '14px', height: '14px' }} />
+                      Add Folder to Blacklist
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section A: Explicit Local Directory Paths */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                    <HardDrive style={{ width: '13px', height: '13px', color: 'var(--text-secondary)' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Explicit Blacklisted Directories (Resolved Paths):
                     </span>
-                  ))}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    padding: '10px 12px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.04)',
+                    minHeight: '44px',
+                    alignItems: 'center',
+                  }}>
+                    {(!sharingPolicy.excludedDirectoryPaths || sharingPolicy.excludedDirectoryPaths.length === 0) ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        No explicit directories added yet. Click "Add Folder to Blacklist" to pick a folder.
+                      </span>
+                    ) : (
+                      sharingPolicy.excludedDirectoryPaths.map((dirPath: string) => {
+                        const folderName = dirPath.split(/[/\\]/).filter(Boolean).pop() || dirPath;
+                        return (
+                          <span
+                            key={dirPath}
+                            title={dirPath}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '5px 10px',
+                              background: 'rgba(239, 68, 68, 0.16)',
+                              color: '#fca5a5',
+                              border: '1px solid rgba(239, 68, 68, 0.35)',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontFamily: 'monospace',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <Folder style={{ width: '12px', height: '12px', opacity: 0.9 }} />
+                            <span style={{ fontWeight: 600 }}>{folderName}</span>
+                            <span style={{ fontSize: '10px', opacity: 0.65, maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              ({dirPath})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveBlacklistedFolder(dirPath)}
+                              title={`Remove "${dirPath}" from blacklist`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '18px',
+                                height: '18px',
+                                borderRadius: '4px',
+                                border: 'none',
+                                background: 'rgba(239, 68, 68, 0.25)',
+                                color: '#ffffff',
+                                cursor: 'pointer',
+                                padding: 0,
+                                marginLeft: '2px',
+                                transition: 'all 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.6)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)';
+                              }}
+                            >
+                              <X style={{ width: '11px', height: '11px' }} />
+                            </button>
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                {/* Section B: Built-in Directory Name Patterns */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                    <Sliders style={{ width: '13px', height: '13px', color: 'var(--text-secondary)' }} />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                      Built-in Name Patterns (Segment Exclusions):
+                    </span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    padding: '10px 12px',
+                    background: 'rgba(0, 0, 0, 0.2)',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 255, 255, 0.04)',
+                    minHeight: '44px',
+                    alignItems: 'center',
+                  }}>
+                    {(!sharingPolicy.excludedFolderPatterns || sharingPolicy.excludedFolderPatterns.length === 0) ? (
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                        No name patterns active. Click "Restore Defaults" to restore recommended patterns.
+                      </span>
+                    ) : (
+                      sharingPolicy.excludedFolderPatterns.map((folder: string) => (
+                        <span
+                          key={folder}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '4px 9px',
+                            background: 'rgba(239, 68, 68, 0.10)',
+                            color: '#f87171',
+                            border: '1px solid rgba(239, 68, 68, 0.22)',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontFamily: 'monospace',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>/{folder}/</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBlacklistPattern(folder)}
+                            title={`Remove pattern "/${folder}/" from blacklist`}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '16px',
+                              height: '16px',
+                              borderRadius: '4px',
+                              border: 'none',
+                              background: 'rgba(239, 68, 68, 0.18)',
+                              color: '#fca5a5',
+                              cursor: 'pointer',
+                              padding: 0,
+                              marginLeft: '2px',
+                              transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.5)';
+                              e.currentTarget.style.color = '#ffffff';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                              e.currentTarget.style.color = '#fca5a5';
+                            }}
+                          >
+                            <X style={{ width: '10px', height: '10px' }} />
+                          </button>
+                        </span>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

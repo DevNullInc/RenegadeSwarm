@@ -125,6 +125,12 @@ describe('Swarm Daemon Authentication & Authorization Security', () => {
     expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
   });
 
+  it('POST /api/sister/wakeup should reject unauthenticated requests with 401', async () => {
+    const res = await makeRequest('POST', '/api/sister/wakeup', { source: 'cmm' });
+    expect(res.status).toBe(401);
+    expect(res.data.error).toBe('Unauthorized: Valid Bearer token required');
+  });
+
   it('Protected endpoints should succeed when presenting valid Bearer token', async () => {
     const focusRes = await makeRequest('POST', '/api/window/focus', {}, {
       authorization: `Bearer ${validToken}`,
@@ -137,5 +143,11 @@ describe('Swarm Daemon Authentication & Authorization Security', () => {
     });
     expect(cmmRes.status).toBe(200);
     expect(cmmRes.data.success).toBe(true);
+
+    const sisterRes = await makeRequest('POST', '/api/sister/wakeup', { source: 'cmm' }, {
+      authorization: `Bearer ${validToken}`,
+    });
+    expect(sisterRes.status).toBe(200);
+    expect(sisterRes.data.success).toBe(true);
   });
 });

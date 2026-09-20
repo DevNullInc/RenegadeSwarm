@@ -154,4 +154,38 @@ describe('SwarmDaemonServer HTTP Bridge (:5180)', () => {
     expect(res.status).toBe(204);
     expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5174');
   });
+
+  it('should acknowledge sister wakeup on POST /api/sister/wakeup and notify window', async () => {
+    let sentEvent = '';
+    let sentData: any = null;
+    const mockWin: any = {
+      isDestroyed: () => false,
+      webContents: {
+        send: (channel: string, data: any) => {
+          sentEvent = channel;
+          sentData = data;
+        },
+      },
+    };
+    server.setMainWindow(mockWin);
+
+    const res = await makeRequest(
+      'POST',
+      '/api/sister/wakeup',
+      { source: 'cmm', ts: Date.now() },
+      { authorization: `Bearer ${authToken}` }
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.data.success).toBe(true);
+    expect(res.data.message).toBe('Swarm sister wakeup acknowledged');
+    expect(sentEvent).toBe('cmm:sisterWakeup');
+    expect(sentData?.source).toBe('cmm');
+  });
+
+  it('sendSisterWakeup should swallow offline errors and return false when sister port is offline', async () => {
+    // Port 59999 is inactive
+    const result = await server.sendSisterWakeup(59999);
+    expect(result).toBe(false);
+  });
 });

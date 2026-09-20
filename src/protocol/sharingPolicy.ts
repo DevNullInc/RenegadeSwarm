@@ -45,6 +45,7 @@ export const SharingPolicySettingsSchema = z.object({
     'custom',
     'internal',
   ]),
+  excludedDirectoryPaths: z.array(z.string()).default([]),
   excludedTagPatterns: z.array(z.string()).default([
     'private',
     'personal',
@@ -80,6 +81,7 @@ export const DEFAULT_SHARING_POLICY: SharingPolicySettings = {
     'custom',
     'internal',
   ],
+  excludedDirectoryPaths: [],
   excludedTagPatterns: [
     'private',
     'personal',
@@ -150,19 +152,30 @@ export function evaluateModelSharePermission(
     }
   }
 
-  // 5. Check excluded folder patterns (e.g. D:\models\private\model.safetensors)
+  // 5. Check excluded folder name patterns (segment match, e.g. /private/ or /wip/)
   const normalizedPath = candidate.filePath.toLowerCase().replace(/\\/g, '/');
   for (const folderPattern of policy.excludedFolderPatterns) {
     const cleanPattern = folderPattern.toLowerCase().trim();
     if (cleanPattern && normalizedPath.includes(`/${cleanPattern}/`)) {
       return {
         canShare: false,
-        reason: `File is located in excluded private directory "/${cleanPattern}/".`,
+        reason: `File is located in excluded private directory pattern "/${cleanPattern}/".`,
       };
     }
   }
 
-  // 6. Check excluded tags (e.g. ["private", "wip"])
+  // 6. Check user-blacklisted absolute directory paths (prefix / hierarchy match)
+  for (const excludedDir of policy.excludedDirectoryPaths || []) {
+    const normalizedDir = excludedDir.toLowerCase().replace(/\\/g, '/').replace(/\/+$/, '');
+    if (normalizedDir && (normalizedPath.startsWith(`${normalizedDir}/`) || normalizedPath === normalizedDir)) {
+      return {
+        canShare: false,
+        reason: `File is located inside blacklisted directory path "${excludedDir}".`,
+      };
+    }
+  }
+
+  // 7. Check excluded tags (e.g. ["private", "wip"])
   if (candidate.tags && candidate.tags.length > 0) {
     for (const tag of candidate.tags) {
       const lowerTag = tag.toLowerCase().trim();
@@ -177,7 +190,7 @@ export function evaluateModelSharePermission(
     }
   }
 
-  // 7. Mode-Specific Evaluation
+  // 8. Mode-Specific Evaluation
   if (policy.mode === 'opt_in_only') {
     const isOptedIn = candidate.isExplicitlyOptedIn || policy.optedInModelIds.includes(modelId);
     if (!isOptedIn) {

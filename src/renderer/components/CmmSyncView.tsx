@@ -28,6 +28,9 @@ interface CmmSyncViewProps {
   sharingPolicy?: SharingPolicySettings;
   cmmConnected?: boolean;
   cmmDiscovered?: boolean;
+  isCheckingCmm?: boolean;
+  cmmProbeBudget?: number;
+  onRetryCmm?: () => void;
   onSyncConfig: (dbPath: string, rootPath: string) => Promise<boolean>;
   onRefreshModels: () => Promise<void>;
   onQuickSeed: (model: CmmLocalModelRow) => void;
@@ -42,6 +45,9 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   sharingPolicy = DEFAULT_SHARING_POLICY,
   cmmConnected = false,
   cmmDiscovered = false,
+  isCheckingCmm = false,
+  cmmProbeBudget = 5,
+  onRetryCmm,
   onSyncConfig,
   onRefreshModels,
   onQuickSeed,
@@ -149,9 +155,30 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
 
       {/* Configuration Form */}
       <form onSubmit={handleSave} className="glass-panel" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Database size={15} color="#a855f7" />
-          <span>Local CMM Database & Model Root Configuration</span>
+        <div style={{ fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Database size={15} color="#a855f7" />
+            <span>Local CMM Database & Model Root Configuration</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {cmmConnected ? (
+              <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                ● CMM Connected
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onRetryCmm}
+                disabled={isCheckingCmm}
+                className="btn-secondary"
+                style={{ padding: '3px 10px', fontSize: '11px', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '5px' }}
+                title={cmmProbeBudget <= 0 ? 'Pings timed out after 5 attempts. Click to re-ping CMM.' : `${cmmProbeBudget} auto-pings left. Click to re-ping now.`}
+              >
+                <RefreshCw size={12} className={isCheckingCmm ? 'animate-spin' : ''} />
+                <span>{isCheckingCmm ? 'Pinging CMM...' : 'CMM Offline (Re-ping)'}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(260px, 1fr) auto', gap: '14px', alignItems: 'flex-end' }}>

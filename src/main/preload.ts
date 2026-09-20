@@ -40,6 +40,10 @@ export interface RenegadeSwarmApi {
   configureCmmSync: (req: CmmSyncConfigRequest) => Promise<any>;
   getSharingPolicy: () => Promise<any>;
   updateSharingPolicy: (settings: any) => Promise<any>;
+  addBlacklistDirectory: () => Promise<any>;
+  removeBlacklistDirectory: (dirPath: string) => Promise<any>;
+  removeBlacklistPattern: (pattern: string) => Promise<any>;
+  restoreDefaultBlacklist: () => Promise<any>;
   toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<any>;
   browseModelFile: () => Promise<any>;
   browsePreviewFile: () => Promise<any>;
@@ -68,6 +72,7 @@ export interface RenegadeSwarmApi {
   cancelPackagingJob: (jobId?: string) => Promise<any>;
   clearPackagingJob: () => Promise<any>;
   onPackageProgress: (callback: (progress: any) => void) => () => void;
+  onCmmSisterWakeup: (callback: (payload: any) => void) => () => void;
 }
 
 const api: RenegadeSwarmApi = {
@@ -88,6 +93,13 @@ const api: RenegadeSwarmApi = {
       ipcRenderer.removeListener('swarm:packageProgress', handler);
     };
   },
+  onCmmSisterWakeup: (callback: (payload: any) => void) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('cmm:sisterWakeup', handler);
+    return () => {
+      ipcRenderer.removeListener('cmm:sisterWakeup', handler);
+    };
+  },
   getBandwidthSettings: () => ipcRenderer.invoke('bandwidth:getSettings'),
   updateBandwidthSettings: (settings) => ipcRenderer.invoke('bandwidth:updateSettings', settings),
   getBandwidthStats: () => ipcRenderer.invoke('bandwidth:getStats'),
@@ -96,6 +108,10 @@ const api: RenegadeSwarmApi = {
   configureCmmSync: (req) => ipcRenderer.invoke('cmm:configureSync', req),
   getSharingPolicy: () => ipcRenderer.invoke('sharing:getPolicy'),
   updateSharingPolicy: (settings) => ipcRenderer.invoke('sharing:updatePolicy', settings),
+  addBlacklistDirectory: () => ipcRenderer.invoke('sharing:addBlacklistDir'),
+  removeBlacklistDirectory: (dirPath: string) => ipcRenderer.invoke('sharing:removeBlacklistDir', { dirPath }),
+  removeBlacklistPattern: (pattern: string) => ipcRenderer.invoke('sharing:removeBlacklistPattern', { pattern }),
+  restoreDefaultBlacklist: () => ipcRenderer.invoke('sharing:restoreDefaultBlacklist'),
   toggleModelShare: (req) => ipcRenderer.invoke('sharing:toggleModelShare', req),
   browseModelFile: () => ipcRenderer.invoke('dialog:openModelFile'),
   browsePreviewFile: () => ipcRenderer.invoke('dialog:openPreviewFile'),

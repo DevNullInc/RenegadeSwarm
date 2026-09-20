@@ -16,6 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import path from 'path';
+import { z } from 'zod';
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import {
   AddMagnetRequestSchema,
@@ -496,8 +498,61 @@ export function registerIpcHandlers() {
   ipcMain.handle('sharing:updatePolicy', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const validated = SharingPolicySettingsSchema.partial().parse(raw);
-      const updated = sharingPolicyManager.updatePolicy(validated);
+      // Strip excludedDirectoryPaths from general updatePolicy to enforce privileged dialog boundary
+      const { excludedDirectoryPaths, ...safeUpdates } = validated;
+      const updated = sharingPolicyManager.updatePolicy(safeUpdates);
       return { success: true, data: updated };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('sharing:addBlacklistDir', async (): Promise<IpcResponse> => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Select Directory to Blacklist from Swarm Sharing',
+        buttonLabel: 'Blacklist Directory',
+        properties: ['openDirectory'],
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, error: 'Directory selection canceled' };
+      }
+
+      const rawPath = result.filePaths[0];
+      const resolvedPath = path.resolve(rawPath);
+      cmmFolderRouter.recordSessionDialogPath(resolvedPath);
+      const updatedPolicy = sharingPolicyManager.addBlacklistDirectory(resolvedPath);
+      return { success: true, data: updatedPolicy };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('sharing:removeBlacklistDir', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { dirPath } = z.object({ dirPath: z.string().min(1) }).parse(raw);
+      const updatedPolicy = sharingPolicyManager.removeBlacklistDirectory(dirPath);
+      return { success: true, data: updatedPolicy };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('sharing:removeBlacklistPattern', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { pattern } = z.object({ pattern: z.string().min(1) }).parse(raw);
+      const updatedPolicy = sharingPolicyManager.removeBlacklistPattern(pattern);
+      return { success: true, data: updatedPolicy };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('sharing:restoreDefaultBlacklist', async (): Promise<IpcResponse> => {
+    try {
+      const updatedPolicy = sharingPolicyManager.restoreDefaultBlacklist();
+      return { success: true, data: updatedPolicy };
     } catch (err: any) {
       return { success: false, error: err.message };
     }

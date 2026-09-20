@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Navbar, TabId } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { DiscoveryView } from './components/DiscoveryView';
@@ -57,6 +57,10 @@ declare global {
       configureCmmSync: (req: any) => Promise<{ success: boolean; data?: any; error?: string }>;
       getSharingPolicy: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
       updateSharingPolicy: (settings: any) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      addBlacklistDirectory: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      removeBlacklistDirectory: (dirPath: string) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      removeBlacklistPattern: (pattern: string) => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
+      restoreDefaultBlacklist: () => Promise<{ success: boolean; data?: SharingPolicySettings; error?: string }>;
       toggleModelShare: (req: { modelId: string; optIn: boolean }) => Promise<{ success: boolean; data?: any; error?: string }>;
       browseModelFile: () => Promise<{ success: boolean; data?: { filePath: string; metadata: any }; error?: string }>;
       browsePreviewFile: () => Promise<{ success: boolean; data?: { filePath: string; workflowMeta?: any }; error?: string }>;
@@ -85,6 +89,7 @@ declare global {
       cancelPackagingJob: (jobId?: string) => Promise<{ success: boolean; error?: string }>;
       clearPackagingJob: () => Promise<{ success: boolean; error?: string }>;
       onPackageProgress: (callback: (progress: import('../shared/ipcContracts').PackageJobProgress) => void) => () => void;
+      onCmmSisterWakeup?: (callback: (payload: { source: string; ts: number }) => void) => () => void;
     };
   }
 }
@@ -111,6 +116,14 @@ export default function App() {
   const [cmmModelCount, setCmmModelCount] = useState(0);
   const [cmmDbPath, setCmmDbPath] = useState('D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [comfyModelsRoot, setComfyModelsRoot] = useState('D:\\ComfyUI\\models');
+  const [isCheckingCmm, setIsCheckingCmm] = useState(false);
+  const [cmmProbeBudget, setCmmProbeBudget] = useState(5);
+
+  const cmmConnectedRef = useRef(cmmConnected);
+  cmmConnectedRef.current = cmmConnected;
+
+  const cmmProbeBudgetRef = useRef(cmmProbeBudget);
+  cmmProbeBudgetRef.current = cmmProbeBudget;
 
   const [selectedSeederModel, setSelectedSeederModel] = useState<CmmLocalModelRow | null>(null);
 
@@ -144,35 +157,69 @@ export default function App() {
     }
   };
 
-  const checkCmmStatus = async () => {
-    if (window.renegadeSwarm) {
-      try {
-        const res = await window.renegadeSwarm.getCmmStatus();
-        if (res.success && res.data) {
-          const wasConnected = cmmConnected;
-          const isNowConnected = Boolean(res.data.connected);
-          const isNowDiscovered = Boolean(res.data.discovered);
-          setCmmConnected(isNowConnected);
-          setCmmDiscovered(isNowDiscovered);
-          setCmmModelCount(res.data.modelCount || 0);
+  const checkCmmStatus = async (manual: boolean = false) => {
+    if (!window.renegadeSwarm) return;
 
-          if (res.data.dbPath && res.data.dbPath !== cmmDbPath) {
-            setCmmDbPath(res.data.dbPath);
-          }
+    // If interval ping and budget is exhausted while disconnected, skip waking up background tasks
+    if (!manual && !cmmConnectedRef.current && cmmProbeBudgetRef.current <= 0) {
+      return;
+    }
 
-          // If CMM status newly transitioned to connected or count changed, auto-refresh models
-          if (!wasConnected && isNowConnected) {
+    if (manual) {
+      cmmProbeBudgetRef.current = 5;
+      setCmmProbeBudget(5);
+    }
+
+    setIsCheckingCmm(true);
+    try {
+      const res = await window.renegadeSwarm.getCmmStatus();
+      if (res.success && res.data) {
+        const wasConnected = cmmConnectedRef.current;
+        const isNowConnected = Boolean(res.data.connected);
+        const isNowDiscovered = Boolean(res.data.discovered);
+        cmmConnectedRef.current = isNowConnected;
+        setCmmConnected(isNowConnected);
+        setCmmDiscovered(isNowDiscovered);
+        setCmmModelCount(res.data.modelCount || 0);
+
+        if (res.data.dbPath && res.data.dbPath !== cmmDbPath) {
+          setCmmDbPath(res.data.dbPath);
+        }
+
+        if (isNowConnected) {
+          cmmProbeBudgetRef.current = 5;
+          setCmmProbeBudget(5);
+          // If CMM status newly transitioned to connected, auto-refresh models
+          if (!wasConnected) {
             fetchCmmModels();
           }
         } else {
-          setCmmConnected(false);
-          setCmmDiscovered(false);
+          const newBudget = Math.max(0, cmmProbeBudgetRef.current - 1);
+          cmmProbeBudgetRef.current = newBudget;
+          setCmmProbeBudget(newBudget);
         }
-      } catch {
+      } else {
+        cmmConnectedRef.current = false;
         setCmmConnected(false);
         setCmmDiscovered(false);
+        const newBudget = Math.max(0, cmmProbeBudgetRef.current - 1);
+        cmmProbeBudgetRef.current = newBudget;
+        setCmmProbeBudget(newBudget);
       }
+    } catch {
+      cmmConnectedRef.current = false;
+      setCmmConnected(false);
+      setCmmDiscovered(false);
+      const newBudget = Math.max(0, cmmProbeBudgetRef.current - 1);
+      cmmProbeBudgetRef.current = newBudget;
+      setCmmProbeBudget(newBudget);
+    } finally {
+      setIsCheckingCmm(false);
     }
+  };
+
+  const handleManualRetryCmm = () => {
+    checkCmmStatus(true);
   };
 
   const fetchCmmModels = async () => {
@@ -182,7 +229,10 @@ export default function App() {
         setCmmModels(res.data);
         setCmmModelCount(res.data.length);
         if (res.data.length > 0) {
+          cmmConnectedRef.current = true;
           setCmmConnected(true);
+          cmmProbeBudgetRef.current = 5;
+          setCmmProbeBudget(5);
         }
       }
     }
@@ -199,25 +249,38 @@ export default function App() {
 
   useEffect(() => {
     fetchTorrents();
-    checkCmmStatus();
+    checkCmmStatus(true);
     fetchCmmModels();
     fetchSharingPolicy();
 
     // 1-second interval for real-time torrent telemetry
     const torrentInterval = setInterval(fetchTorrents, 1000);
-    // 5-second polling check to detect if CMM is running/connected on the machine
-    const cmmInterval = setInterval(checkCmmStatus, 5000);
+    // 5-second polling check to detect if CMM is running/connected on the machine (capped at 5 attempts when offline)
+    const cmmInterval = setInterval(() => {
+      checkCmmStatus(false);
+    }, 5000);
 
     const onFocus = () => {
-      checkCmmStatus();
+      // Re-probe on window focus if connected or budget remains
+      checkCmmStatus(false);
       fetchTorrents();
     };
     window.addEventListener('focus', onFocus);
+
+    // Listen for sister wakeup pings from CMM (when CMM comes online second)
+    const cleanupSisterWakeup = window.renegadeSwarm?.onCmmSisterWakeup
+      ? window.renegadeSwarm.onCmmSisterWakeup((data) => {
+          console.info('[Swarm] Received sister wakeup from CMM:', data);
+          // Reset budget and check CMM status immediately
+          checkCmmStatus(true);
+        })
+      : undefined;
 
     return () => {
       clearInterval(torrentInterval);
       clearInterval(cmmInterval);
       window.removeEventListener('focus', onFocus);
+      if (cleanupSisterWakeup) cleanupSisterWakeup();
     };
   }, []);
 
@@ -327,6 +390,9 @@ export default function App() {
         cmmDiscovered={cmmDiscovered}
         cmmModelCount={cmmModelCount}
         onInstallCmm={handleInstallCmm}
+        isCheckingCmm={isCheckingCmm}
+        cmmProbeBudget={cmmProbeBudget}
+        onRetryCmm={handleManualRetryCmm}
       />
 
       <main style={{ flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
@@ -361,6 +427,9 @@ export default function App() {
             sharingPolicy={sharingPolicy}
             cmmConnected={cmmConnected}
             cmmDiscovered={cmmDiscovered}
+            isCheckingCmm={isCheckingCmm}
+            cmmProbeBudget={cmmProbeBudget}
+            onRetryCmm={handleManualRetryCmm}
             onSyncConfig={handleSyncCmmConfig}
             onRefreshModels={fetchCmmModels}
             onQuickSeed={(model) => {
