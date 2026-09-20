@@ -50,6 +50,26 @@ declare global {
           modelCount: number;
           isProcessRunning: boolean;
           lastChecked: number;
+          comfyuiRoot?: string;
+          comfyuiFolders?: string[];
+          comfyuiInstallDir?: string;
+          folderMappings?: Record<string, string>;
+        };
+        error?: string;
+      }>;
+      autoDetectCmm: () => Promise<{
+        success: boolean;
+        data?: {
+          connected: boolean;
+          discovered: boolean;
+          dbPath: string;
+          modelCount: number;
+          isProcessRunning: boolean;
+          lastChecked: number;
+          comfyuiRoot?: string;
+          comfyuiFolders?: string[];
+          comfyuiInstallDir?: string;
+          folderMappings?: Record<string, string>;
         };
         error?: string;
       }>;
@@ -182,8 +202,11 @@ export default function App() {
         setCmmDiscovered(isNowDiscovered);
         setCmmModelCount(res.data.modelCount || 0);
 
-        if (res.data.dbPath && res.data.dbPath !== cmmDbPath) {
+        if (res.data.dbPath) {
           setCmmDbPath(res.data.dbPath);
+        }
+        if (res.data.comfyuiRoot) {
+          setComfyModelsRoot(res.data.comfyuiRoot);
         }
 
         if (isNowConnected) {
@@ -220,6 +243,29 @@ export default function App() {
 
   const handleManualRetryCmm = () => {
     checkCmmStatus(true);
+  };
+
+  const handleAutoDetectCmm = async (): Promise<{ success: boolean; data?: any }> => {
+    if (!window.renegadeSwarm) return { success: false };
+    try {
+      const res = window.renegadeSwarm.autoDetectCmm
+        ? await window.renegadeSwarm.autoDetectCmm()
+        : await window.renegadeSwarm.getCmmStatus();
+      if (res.success && res.data) {
+        if (res.data.dbPath) setCmmDbPath(res.data.dbPath);
+        if (res.data.comfyuiRoot) setComfyModelsRoot(res.data.comfyuiRoot);
+        setCmmConnected(Boolean(res.data.connected));
+        setCmmDiscovered(Boolean(res.data.discovered));
+        if (res.data.modelCount !== undefined) setCmmModelCount(res.data.modelCount);
+        if (res.data.connected) {
+          fetchCmmModels();
+        }
+        return res;
+      }
+      return { success: false, data: res.data };
+    } catch (err: any) {
+      return { success: false, data: err?.message };
+    }
   };
 
   const fetchCmmModels = async () => {
@@ -438,6 +484,7 @@ export default function App() {
             }}
             onToggleModelShare={handleToggleModelShare}
             onInstallCmm={handleInstallCmm}
+            onAutoDetect={handleAutoDetectCmm}
           />
         )}
         {activeTab === 'bandwidth' && (

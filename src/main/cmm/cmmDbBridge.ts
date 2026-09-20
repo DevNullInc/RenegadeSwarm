@@ -19,6 +19,7 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+import http from 'http';
 import { SwarmManifest } from '../../protocol/types';
 
 export interface CmmLocalModelRow {
@@ -75,7 +76,11 @@ export class CmmDbBridge {
       path.join(process.cwd(), '..', 'RenegadeCMM', 'renegadecmm.sqlite'),
       path.join(process.cwd(), 'renegadecmm.sqlite'),
       path.join(process.env.APPDATA || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(process.env.APPDATA || '', 'civitai-model-manager', 'renegadecmm.sqlite'),
+      path.join(process.env.APPDATA || '', 'civitai-model-manager', 'civitai_manager.sqlite'),
+      path.join(process.env.USERPROFILE || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
       path.join(process.env.HOME || '', '.config', 'renegadecmm', 'renegadecmm.sqlite'),
+      path.join(process.env.HOME || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
     ];
 
     for (const p of candidatePaths) {
@@ -99,12 +104,75 @@ export class CmmDbBridge {
   }
 
   /**
+   * Queries the live CMM HTTP API bridge (port 5174) for active configuration.
+   */
+  async fetchCmmApiConfig(apiPort: number = 5174): Promise<{ online: boolean; pid?: number; config?: any }> {
+    return new Promise((resolve) => {
+      const req = http.get(
+        {
+          hostname: '127.0.0.1',
+          port: apiPort,
+          path: '/api/config',
+          timeout: 800,
+        },
+        (res) => {
+          if (res.statusCode !== 200) {
+            return resolve({ online: false });
+          }
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            try {
+              const config = JSON.parse(data);
+              resolve({ online: true, config });
+            } catch {
+              resolve({ online: false });
+            }
+          });
+        }
+      );
+      req.on('error', () => resolve({ online: false }));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve({ online: false });
+      });
+    });
+  }
+
+  /**
    * Performs an active health check on RenegadeCMM availability, process state, and database connectivity.
    */
   async checkCmmStatus(): Promise<CmmStatusResult> {
     const dbPath = this.getCmmDbPath();
     const now = Date.now();
     const discovered = Boolean(dbPath && fs.existsSync(dbPath));
+
+    // 1. Check if CMM is online via HTTP API Bridge
+    const apiResult = await this.fetchCmmApiConfig().catch(() => ({ online: false, config: undefined }));
+    let isProcessRunning = Boolean(apiResult.online);
+
+    // 2. Check PID file if HTTP check didn't confirm running
+    if (!isProcessRunning && dbPath) {
+      const cmmDir = path.dirname(dbPath);
+      const pidPath = path.join(cmmDir, '.cmm.pid');
+      if (fs.existsSync(pidPath)) {
+        try {
+          const pidStr = fs.readFileSync(pidPath, 'utf8').trim();
+          const pid = parseInt(pidStr, 10);
+          if (!isNaN(pid)) {
+            process.kill(pid, 0); // signal 0 liveness check
+            isProcessRunning = true;
+          }
+        } catch {
+          isProcessRunning = false;
+        }
+      }
+    }
+
+    let comfyuiRoot = apiResult.config?.comfyui_root || '';
+    let comfyuiFolders: string[] = Array.isArray(apiResult.config?.comfyui_folders) ? apiResult.config.comfyui_folders : [];
+    let comfyuiInstallDir = apiResult.config?.comfyui_install_dir || '';
+    let folderMappings: Record<string, string> = apiResult.config?.folder_mappings || {};
 
     if (!discovered) {
       this.isAttached = false;
@@ -115,25 +183,12 @@ export class CmmDbBridge {
         modelCount: 0,
         isProcessRunning: false,
         lastChecked: now,
+        comfyuiRoot,
+        comfyuiFolders,
+        comfyuiInstallDir,
+        folderMappings,
       };
       return this.lastStatusResult;
-    }
-
-    // Check if CMM process is actively running via PID file
-    let isProcessRunning = false;
-    const cmmDir = path.dirname(dbPath);
-    const pidPath = path.join(cmmDir, '.cmm.pid');
-    if (fs.existsSync(pidPath)) {
-      try {
-        const pidStr = fs.readFileSync(pidPath, 'utf8').trim();
-        const pid = parseInt(pidStr, 10);
-        if (!isNaN(pid)) {
-          process.kill(pid, 0); // Check if process is alive (signal 0)
-          isProcessRunning = true;
-        }
-      } catch {
-        isProcessRunning = false;
-      }
     }
 
     // Verify database connectivity and retrieve active model count and app config
@@ -147,6 +202,10 @@ export class CmmDbBridge {
           modelCount: 0,
           isProcessRunning,
           lastChecked: now,
+          comfyuiRoot,
+          comfyuiFolders,
+          comfyuiInstallDir,
+          folderMappings,
         };
         return this.lastStatusResult;
       }
@@ -161,37 +220,34 @@ export class CmmDbBridge {
         );
       });
 
-      // Query cmm.app_config for model folders, root path, and install directory
-      let comfyuiRoot = '';
-      let comfyuiFolders: string[] = [];
-      let comfyuiInstallDir = '';
-      let folderMappings: Record<string, string> = {};
-
-      await new Promise<void>((resolve) => {
-        this.localDb?.all(
-          'SELECT key, value FROM cmm.app_config;',
-          (err, rows: any[]) => {
-            if (!err && Array.isArray(rows)) {
-              for (const r of rows) {
-                try {
-                  const val = JSON.parse(r.value);
-                  if (r.key === 'comfyui_root') comfyuiRoot = typeof val === 'string' ? val : '';
-                  if (r.key === 'comfyui_folders') comfyuiFolders = Array.isArray(val) ? val : [];
-                  if (r.key === 'comfyui_install_dir') comfyuiInstallDir = typeof val === 'string' ? val : '';
-                  if (r.key === 'folder_mappings' && typeof val === 'object') folderMappings = val;
-                } catch {
-                  if (r.key === 'comfyui_root') comfyuiRoot = String(r.value || '');
-                  if (r.key === 'comfyui_install_dir') comfyuiInstallDir = String(r.value || '');
+      // If HTTP API didn't already populate configs, query cmm.app_config table
+      if (!comfyuiRoot || !comfyuiFolders.length) {
+        await new Promise<void>((resolve) => {
+          this.localDb?.all(
+            'SELECT key, value FROM cmm.app_config;',
+            (err, rows: any[]) => {
+              if (!err && Array.isArray(rows)) {
+                for (const r of rows) {
+                  try {
+                    const val = JSON.parse(r.value);
+                    if (r.key === 'comfyui_root' && !comfyuiRoot) comfyuiRoot = typeof val === 'string' ? val : '';
+                    if (r.key === 'comfyui_folders' && !comfyuiFolders.length) comfyuiFolders = Array.isArray(val) ? val : [];
+                    if (r.key === 'comfyui_install_dir' && !comfyuiInstallDir) comfyuiInstallDir = typeof val === 'string' ? val : '';
+                    if (r.key === 'folder_mappings' && !Object.keys(folderMappings).length && typeof val === 'object') folderMappings = val;
+                  } catch {
+                    if (r.key === 'comfyui_root' && !comfyuiRoot) comfyuiRoot = String(r.value || '');
+                    if (r.key === 'comfyui_install_dir' && !comfyuiInstallDir) comfyuiInstallDir = String(r.value || '');
+                  }
                 }
               }
+              resolve();
             }
-            resolve();
-          }
-        );
-      });
+          );
+        });
+      }
 
       // If comfyui_root is present but not in comfyui_folders, ensure it's included
-      if (comfyuiRoot && !comfyuiFolders.some(f => f.toLowerCase() === comfyuiRoot.toLowerCase())) {
+      if (comfyuiRoot && !comfyuiFolders.some((f) => f.toLowerCase() === comfyuiRoot.toLowerCase())) {
         comfyuiFolders.unshift(comfyuiRoot);
       }
 

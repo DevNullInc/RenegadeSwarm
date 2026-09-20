@@ -16,8 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react';
-import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert, DownloadCloud, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert, DownloadCloud, ExternalLink, Wand2 } from 'lucide-react';
 import { CmmLocalModelRow } from '../../main/cmm/cmmDbBridge';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../../protocol/sharingPolicy';
 
@@ -31,6 +31,7 @@ interface CmmSyncViewProps {
   isCheckingCmm?: boolean;
   cmmProbeBudget?: number;
   onRetryCmm?: () => void;
+  onAutoDetect?: () => Promise<{ success: boolean; data?: any }>;
   onSyncConfig: (dbPath: string, rootPath: string) => Promise<boolean>;
   onRefreshModels: () => Promise<void>;
   onQuickSeed: (model: CmmLocalModelRow) => void;
@@ -48,6 +49,7 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   isCheckingCmm = false,
   cmmProbeBudget = 5,
   onRetryCmm,
+  onAutoDetect,
   onSyncConfig,
   onRefreshModels,
   onQuickSeed,
@@ -57,7 +59,45 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   const [dbPathInput, setDbPathInput] = useState(cmmDbPath || 'D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
   const [modelsRootInput, setModelsRootInput] = useState(comfyModelsRoot || 'D:\\ComfyUI\\models');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Sync inputs when auto-detected or updated from background bridge
+  useEffect(() => {
+    if (cmmDbPath) setDbPathInput(cmmDbPath);
+  }, [cmmDbPath]);
+
+  useEffect(() => {
+    if (comfyModelsRoot) setModelsRootInput(comfyModelsRoot);
+  }, [comfyModelsRoot]);
+
+  const handleAutoDetect = async () => {
+    setIsAutoDetecting(true);
+    setStatusMsg(null);
+    try {
+      if (onAutoDetect) {
+        const res = await onAutoDetect();
+        if (res.success && res.data) {
+          const detectedDb = res.data.dbPath || dbPathInput;
+          const detectedRoot = res.data.comfyuiRoot || modelsRootInput;
+          setDbPathInput(detectedDb);
+          setModelsRootInput(detectedRoot);
+          const ok = await onSyncConfig(detectedDb, detectedRoot);
+          setStatusMsg(
+            ok
+              ? `Auto-detected and synced with RenegadeCMM (${res.data.modelCount || 0} models detected)!`
+              : 'Auto-detected CMM configuration, but could not attach database.'
+          );
+          return;
+        }
+      }
+      setStatusMsg('Could not auto-detect RenegadeCMM. Ensure CMM is running.');
+    } catch {
+      setStatusMsg('Auto-detection error.');
+    } finally {
+      setIsAutoDetecting(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,7 +221,7 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(260px, 1fr) auto', gap: '14px', alignItems: 'flex-end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(240px, 1fr) minmax(240px, 1fr) auto auto', gap: '12px', alignItems: 'flex-end' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <label style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>RenegadeCMM SQLite Path</label>
             <input
@@ -207,10 +247,22 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
           </div>
 
           <button
+            type="button"
+            onClick={handleAutoDetect}
+            disabled={isAutoDetecting || isSaving}
+            className="btn-secondary"
+            style={{ height: '36px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
+            title="Automatically detect active SQLite database and ComfyUI model roots from running RenegadeCMM instance"
+          >
+            <Wand2 size={14} className={isAutoDetecting ? 'animate-spin' : ''} />
+            <span>{isAutoDetecting ? 'Detecting...' : 'Auto-Detect from CMM'}</span>
+          </button>
+
+          <button
             type="submit"
-            disabled={isSaving}
+            disabled={isSaving || isAutoDetecting}
             className="btn-primary"
-            style={{ height: '36px', whiteSpace: 'nowrap' }}
+            style={{ height: '36px', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <CheckCircle size={15} />
             <span>{isSaving ? 'Connecting...' : 'Connect & Sync Bridge'}</span>

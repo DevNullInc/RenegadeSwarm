@@ -17,6 +17,7 @@
  */
 
 import path from 'path';
+import fs from 'fs';
 import { z } from 'zod';
 import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import {
@@ -349,6 +350,16 @@ export function registerIpcHandlers() {
   ipcMain.handle('cmm:configureSync', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const { cmmDbPath, comfyModelsRoot, defaultDownloadFolder } = CmmSyncConfigRequestSchema.parse(raw);
+      if (cmmDbPath && fs.existsSync(cmmDbPath)) {
+        cmmFolderRouter.recordSessionDialogPath(cmmDbPath);
+        cmmFolderRouter.recordSessionDialogPath(path.dirname(cmmDbPath));
+      }
+      if (comfyModelsRoot && fs.existsSync(comfyModelsRoot)) {
+        cmmFolderRouter.recordSessionDialogPath(comfyModelsRoot);
+      }
+      if (defaultDownloadFolder && fs.existsSync(defaultDownloadFolder)) {
+        cmmFolderRouter.recordSessionDialogPath(defaultDownloadFolder);
+      }
       if (!cmmFolderRouter.isPathAllowed(cmmDbPath)) {
         throw new Error('CMM SQLite database path denied by security confinement policy');
       }
@@ -370,6 +381,26 @@ export function registerIpcHandlers() {
         cmmFolderRouter.syncCmmFolders(status.comfyuiFolders || [], status.comfyuiRoot);
       }
       return { success: status.connected, data: status };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('cmm:autoDetect', async (): Promise<IpcResponse> => {
+    try {
+      const status = await cmmDbBridge.checkCmmStatus();
+      if (status.dbPath && fs.existsSync(status.dbPath)) {
+        cmmFolderRouter.recordSessionDialogPath(status.dbPath);
+        cmmFolderRouter.recordSessionDialogPath(path.dirname(status.dbPath));
+      }
+      if (status.comfyuiRoot && fs.existsSync(status.comfyuiRoot)) {
+        cmmFolderRouter.recordSessionDialogPath(status.comfyuiRoot);
+        cmmFolderRouter.updateConfig({ rootPath: status.comfyuiRoot });
+      }
+      if (status.comfyuiFolders || status.comfyuiRoot) {
+        cmmFolderRouter.syncCmmFolders(status.comfyuiFolders || [], status.comfyuiRoot);
+      }
+      return { success: true, data: status };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
