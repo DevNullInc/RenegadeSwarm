@@ -23,6 +23,7 @@ import { ipcMain, dialog, shell, BrowserWindow } from 'electron';
 import {
   AddMagnetRequestSchema,
   TorrentControlRequestSchema,
+  CreateSwarmPackageRequest,
   CreateSwarmPackageRequestSchema,
   CancelPackageJobRequestSchema,
   BandwidthSettingsSchema,
@@ -36,12 +37,14 @@ import {
   IpcResponse,
 } from '../shared/ipcContracts';
 import { SharingPolicySettingsSchema } from '../protocol/sharingPolicy';
+import { signSwarmManifest } from '../protocol/crypto';
+import { buildSwarmManifest } from './engine/manifestBuilder';
 import { swarmEngine } from './engine/swarmEngine';
 import { packageJobManager } from './engine/packageJobManager';
 import { bandwidthScheduler } from './engine/bandwidthScheduler';
 import { sharingPolicyManager } from './engine/sharingPolicyManager';
 import { keyringManager } from './engine/keyringManager';
-import { cmmDbBridge } from './cmm/cmmDbBridge';
+import { cmmDbBridge, CmmLocalModelRow } from './cmm/cmmDbBridge';
 import { cmmFolderRouter } from './cmm/cmmFolderRouter';
 import { modelMetadataExtractor } from './metadata/modelMetadataExtractor';
 import { contentInspector } from './engine/contentInspector';
@@ -592,8 +595,156 @@ export function registerIpcHandlers() {
   ipcMain.handle('sharing:toggleModelShare', async (_, raw: unknown): Promise<IpcResponse> => {
     try {
       const { modelId, optIn } = ToggleModelShareRequestSchema.parse(raw);
-      const ok = sharingPolicyManager.toggleModelOptIn(modelId, optIn);
-      return { success: ok, data: { modelId, optIn, policy: sharingPolicyManager.getPolicy() } };
+
+      if (optIn) {
+        // 1. Try to find the model from CMM database
+        let model: CmmLocalModelRow | null = null;
+        try {
+          model = await cmmDbBridge.getModelById(modelId);
+        } catch {
+          // Ignore lookup errors
+        }
+
+        // 2. Determine target file path
+        let targetFilePath = model?.file_path || (fs.existsSync(modelId) ? modelId : null);
+
+        if (targetFilePath && fs.existsSync(targetFilePath)) {
+          // Ensure path is accessible/conforming
+          cmmFolderRouter.recordSessionDialogPath(targetFilePath);
+
+          // Extract model metadata (combines safetensors headers, CMM DB, civitai/hf, etc.)
+          let extractedMeta: any = {};
+          try {
+            extractedMeta = await modelMetadataExtractor.extractMetadata(targetFilePath);
+          } catch (metaErr) {
+            console.warn('[Ipc] Metadata extraction warning during auto-seed:', metaErr);
+          }
+
+          // Fetch user identity for Ed25519 signing
+          let identity = keyringManager.getInternalUserIdentity();
+          if (!identity) {
+            try {
+              keyringManager.generateNewIdentity('Renegade Creator', true);
+              identity = keyringManager.getInternalUserIdentity();
+            } catch {
+              // Ignore identity generation error
+            }
+          }
+
+          const modelFileName = model?.file_name || path.basename(targetFilePath);
+          const rawTitle = model?.civitai_name || extractedMeta.title || modelFileName;
+          const title = rawTitle.replace(/\.(safetensors|gguf|bin|pt|pth|onnx|ckpt)$/i, '');
+          const modelType = (model?.model_type || extractedMeta.modelType || 'Checkpoint') as any;
+          const baseModel = extractedMeta.baseModel || 'SDXL 1.0';
+          const creator = identity?.creatorName || extractedMeta.creator || 'Renegade Creator';
+
+          const createPkgReq: CreateSwarmPackageRequest = {
+            modelFilePath: targetFilePath,
+            title: title || modelFileName,
+            version: extractedMeta.version || '1.0.0',
+            modelType,
+            baseModel,
+            creator,
+            description: extractedMeta.description || 'Auto-seeded from RenegadeCMM',
+            tags: extractedMeta.tags && extractedMeta.tags.length > 0 ? extractedMeta.tags : ['ai-model', String(modelType).toLowerCase()],
+            previewFilePath: extractedMeta.previewFilePath && fs.existsSync(extractedMeta.previewFilePath) ? extractedMeta.previewFilePath : undefined,
+            civitaiModelId: model?.civitai_model_id || extractedMeta.civitaiModelId,
+            civitaiVersionId: model?.civitai_version_id || extractedMeta.civitaiVersionId,
+            hfRepoId: model?.hf_repo_id || extractedMeta.hfRepoId,
+            hfCommitSha: model?.hf_commit_sha,
+            license: extractedMeta.license || 'Other',
+          };
+
+          const precomputedSha256 = model?.sha256 || extractedMeta.sha256;
+          const manifest = await buildSwarmManifest(createPkgReq, {
+            precomputedModelSha256: precomputedSha256,
+          });
+
+          if (identity?.publicKeyHex) {
+            manifest.model.creatorPublicKey = identity.publicKeyHex;
+          }
+
+          // Cryptographically sign the manifest if private key is available
+          if (identity && identity.privateKeyHex && identity.publicKeyHex) {
+            try {
+              manifest.signature = signSwarmManifest(manifest, identity.privateKeyHex, identity.publicKeyHex);
+            } catch (signErr) {
+              console.warn('[Ipc] Failed to sign manifest during auto-seed:', signErr);
+            }
+          }
+
+          // Register and immediately start seeding in SwarmEngine
+          swarmEngine.registerSeedingManifest(manifest, targetFilePath);
+
+          // Update CMM metadata if sha256 or extra details were computed
+          if (!model?.sha256 && manifest.hashes.sha256) {
+            await cmmDbBridge.updateModelMetadata({
+              filePath: targetFilePath,
+              sha256: manifest.hashes.sha256,
+              civitaiModelId: createPkgReq.civitaiModelId,
+              civitaiVersionId: createPkgReq.civitaiVersionId,
+              civitaiName: createPkgReq.title,
+              modelType: createPkgReq.modelType,
+              baseModel: createPkgReq.baseModel,
+            }).catch(() => {});
+          }
+
+          // Opt-in both the modelId and infoHash in sharing policy
+          sharingPolicyManager.toggleModelOptIn(modelId, true);
+          sharingPolicyManager.toggleModelOptIn(manifest.hashes.infoHash, true);
+
+          return {
+            success: true,
+            data: {
+              modelId,
+              optIn: true,
+              manifest,
+              policy: sharingPolicyManager.getPolicy(),
+            },
+          };
+        } else {
+          // If file path not found on disk, still record opt-in in policy
+          sharingPolicyManager.toggleModelOptIn(modelId, true);
+          return {
+            success: true,
+            data: {
+              modelId,
+              optIn: true,
+              policy: sharingPolicyManager.getPolicy(),
+            },
+          };
+        }
+      } else {
+        // Opt-Out flow
+        sharingPolicyManager.toggleModelOptIn(modelId, false);
+
+        // Find and stop active torrent seeding this model without deleting local data
+        let model: CmmLocalModelRow | null = null;
+        try {
+          model = await cmmDbBridge.getModelById(modelId);
+        } catch {}
+
+        const activeTorrents = swarmEngine.getActiveTorrents();
+        for (const t of activeTorrents) {
+          const matchId = t.infoHash.toLowerCase() === modelId.toLowerCase();
+          const matchPath = model && t.savePath && path.resolve(t.savePath).toLowerCase() === path.resolve(model.file_path).toLowerCase();
+          const matchDirectPath = t.savePath && path.resolve(t.savePath).toLowerCase() === path.resolve(modelId).toLowerCase();
+
+          if (matchId || matchPath || matchDirectPath) {
+            swarmEngine.removeTorrent(t.infoHash, false);
+            sharingPolicyManager.toggleModelOptIn(t.infoHash, false);
+          }
+        }
+
+        return {
+          success: true,
+          data: {
+            modelId,
+            optIn: false,
+            policy: sharingPolicyManager.getPolicy(),
+          },
+        };
+      }
     } catch (err: any) {
       return { success: false, error: err.message };
     }

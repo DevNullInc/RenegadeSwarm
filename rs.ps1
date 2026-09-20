@@ -34,7 +34,7 @@ param(
   [ValidateSet('start', 'run', 'dev', 'stop', 'kill', 'restart', 'status', 'build', 'package', 'dist', 'test', 'clean-assets', 'bump-version', 'version', 'help')]
   [string]$Action = 'start',
 
-  [int]$Port = 5181,
+  [int]$Port = 5180,
   [int]$ListenPort = 6881,
 
   [switch]$Headless,
@@ -83,11 +83,38 @@ function Write-Status {
   Write-Host $Msg
 }
 
+function Request-DaemonWindowFocus {
+  param([int]$DaemonPort = 5180)
+  $token = ''
+  $tokenPath = Join-Path $env:APPDATA 'RenegadeSwarm\daemon.token'
+  if (Test-Path $tokenPath) {
+    $token = (Get-Content $tokenPath -Raw -ErrorAction SilentlyContinue).Trim()
+  }
+
+  try {
+    $headers = @{
+      'Content-Type' = 'application/json'
+    }
+    if ($token) {
+      $headers['Authorization'] = "Bearer $token"
+    }
+    $res = Invoke-RestMethod -Uri "http://127.0.0.1:$DaemonPort/api/window/focus" -Method POST -Headers $headers -TimeoutSec 2 -ErrorAction Stop
+    if ($res -and $res.success) {
+      return $true
+    }
+  } catch { }
+
+  return $false
+}
+
 function Set-ProcessWindowFocus {
   param([System.Diagnostics.Process]$Proc)
   Add-WindowHelperType
+
+  # 1. Try Win32 HWND activation
   if ($Proc -and $Proc.MainWindowHandle -and $Proc.MainWindowHandle -ne [IntPtr]::Zero) {
     try {
+      # SW_RESTORE = 9, SW_SHOW = 5
       if ([WindowHelper]::IsIconic($Proc.MainWindowHandle)) {
         [WindowHelper]::ShowWindowAsync($Proc.MainWindowHandle, 9) | Out-Null
       } else {
@@ -97,6 +124,12 @@ function Set-ProcessWindowFocus {
       return $true
     } catch { }
   }
+
+  # 2. Try HTTP daemon endpoint focus (handles hidden-to-tray and minimized states)
+  if (Request-DaemonWindowFocus -DaemonPort $Port) {
+    return $true
+  }
+
   return $false
 }
 
@@ -437,16 +470,27 @@ function Test-TcpPortActive([int]$Port) {
 }
 
 function Start-App {
-  $procs = Get-RunningProcs
-  if ($procs.Count -gt 0) {
-    Write-Status '!' 'RenegadeSwarm is already running.' 'Yellow'
-    foreach ($p in $procs) {
+  # Check if already running or if port 5180 is active
+  $existing = Get-RunningProcs
+  if ($existing.Count -gt 0) {
+    # Check if any running process has a visible GUI window to bring to the front
+    foreach ($p in $existing) {
       if (Set-ProcessWindowFocus $p) {
-        Write-Status 'ok' "Brought window to foreground (PID $($p.Id))." 'Green'
+        Write-Status 'ok' "RenegadeSwarm is already running (PID $($p.Id)). Active window brought to front." 'Green'
         return
       }
     }
-    return
+
+    # If daemon port is active or processes exist but no window responded, attempt daemon focus directly
+    if (Request-DaemonWindowFocus -DaemonPort $Port) {
+      Write-Status 'ok' "RenegadeSwarm is already running. Active window brought to front via daemon." 'Green'
+      return
+    }
+
+    # If port is occupied but no visible window exists (orphaned ghost process), stop and auto-restart cleanly
+    Write-Status '!' "Port $Port is in use by an orphaned process without an active window. Auto-cleaning orphaned process and starting fresh..." 'Yellow'
+    Stop-App | Out-Null
+    Start-Sleep -Seconds 1
   }
 
   Ensure-NodeInstalled
@@ -459,29 +503,50 @@ function Start-App {
 
   Push-Location $ProjectRoot
   try {
-    # Build if dist does not exist
-    if (-not (Test-Path 'dist\main\index.js') -or -not (Test-Path 'dist\renderer\index.html')) {
-      Write-Status '>>' 'Compiling main and renderer bundles...' 'Cyan'
-      & npm run build
+    # 1. Compile main process TypeScript
+    Write-Status '>>' 'Verifying main process compilation (TypeScript)...' 'DarkGray'
+    $mainOut = npx.cmd tsc --project tsconfig.main.json --listEmittedFiles 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Status '!!' 'Main process TypeScript compilation FAILED!' 'Red'
+      Write-Host ($mainOut -join "`n") -ForegroundColor Red
+      return
     }
 
-    $electronExe = Join-Path $ProjectRoot 'node_modules\electron\dist\electron.exe'
-    $proc = $null
+    # 2. Build renderer if dist does not exist
+    if (-not (Test-Path 'dist\renderer\index.html')) {
+      Write-Status '>>' 'Compiling renderer bundle (Vite)...' 'Cyan'
+      & npm run build:renderer
+      if ($LASTEXITCODE -ne 0) {
+        Write-Status '!!' 'Renderer build failed.' 'Red'
+        return
+      }
+    }
 
-    if (Test-Path $electronExe) {
-      $psi = New-Object System.Diagnostics.ProcessStartInfo
-      $psi.FileName = $electronExe
-      $psi.Arguments = "."
-      $psi.WorkingDirectory = $ProjectRoot
-      $psi.UseShellExecute = $true
-      $proc = [System.Diagnostics.Process]::Start($psi)
+    # 3. Launch Electron app window
+    $localElectron = Join-Path $ProjectRoot "node_modules\electron\dist\electron.exe"
+    $electronExe = if (Test-Path $localElectron) { $localElectron } else { 'npx.cmd' }
+    $electronArgs = if (Test-Path $localElectron) {
+      if ($Headless -or $NoWindow) { @('.', '--headless') } else { @('.') }
     } else {
-      $psi = New-Object System.Diagnostics.ProcessStartInfo
-      $psi.FileName = 'npx'
-      $psi.Arguments = "electron ."
-      $psi.WorkingDirectory = $ProjectRoot
-      $psi.UseShellExecute = $true
-      $proc = [System.Diagnostics.Process]::Start($psi)
+      if ($Headless -or $NoWindow) { @('electron', '.', '--headless') } else { @('electron', '.') }
+    }
+
+    if ($Headless -or $NoWindow) {
+      Write-Status '>>' 'Starting Electron in headless background mode...' 'Magenta'
+      $env:HEADLESS = "true"
+      $proc = Start-Process -FilePath $electronExe `
+        -ArgumentList $electronArgs `
+        -WorkingDirectory $ProjectRoot `
+        -PassThru -WindowStyle Hidden
+    } else {
+      Write-Status '>>' 'Launching Electron app window...' 'Magenta'
+      $env:HEADLESS = "false"
+      $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+      $startInfo.FileName = $electronExe
+      $startInfo.Arguments = ($electronArgs -join ' ')
+      $startInfo.WorkingDirectory = $ProjectRoot
+      $startInfo.UseShellExecute = $true
+      $proc = [System.Diagnostics.Process]::Start($startInfo)
     }
 
     if ($proc) {

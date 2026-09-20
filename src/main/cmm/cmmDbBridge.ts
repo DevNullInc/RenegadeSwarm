@@ -411,6 +411,25 @@ export class CmmDbBridge {
     });
   }
 
+  async getModelById(modelId: string): Promise<CmmLocalModelRow | null> {
+    if (!this.isAttached) {
+      const ok = await this.attachCmmDatabase();
+      if (!ok) return null;
+    }
+
+    const normalizedPath = modelId.replace(/\\/g, '/');
+    return new Promise((resolve) => {
+      this.localDb?.get(
+        'SELECT * FROM cmm.local_models WHERE id = ? OR LOWER(file_path) = LOWER(?) OR LOWER(file_path) = LOWER(?) LIMIT 1;',
+        [modelId, modelId, normalizedPath],
+        (err, row) => {
+          if (err || !row) resolve(null);
+          else resolve(row as CmmLocalModelRow);
+        }
+      );
+    });
+  }
+
   async registerCompletedDownload(manifest: SwarmManifest, targetFilePath: string): Promise<boolean> {
     if (!this.isAttached) {
       const ok = await this.attachCmmDatabase();

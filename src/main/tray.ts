@@ -29,39 +29,43 @@ export class TrayManager {
   init(window: BrowserWindow) {
     this.mainWindow = window;
 
-    // Resolve tray icon from candidate build paths or use crisp embedded placeholder
-    const candidatePaths = [
-      path.join(__dirname, '../../build/tray-icon.png'),
-      path.join(__dirname, '../build/tray-icon.png'),
-      path.join(__dirname, 'build/tray-icon.png'),
-      path.join(process.cwd(), 'build/tray-icon.png'),
-    ];
+    try {
+      // Resolve tray icon from candidate build paths or use crisp embedded placeholder
+      const candidatePaths = [
+        path.join(__dirname, '../../build/tray-icon.png'),
+        path.join(__dirname, '../build/tray-icon.png'),
+        path.join(__dirname, 'build/tray-icon.png'),
+        path.join(process.cwd(), 'build/tray-icon.png'),
+      ];
 
-    let icon = nativeImage.createEmpty();
-    for (const p of candidatePaths) {
-      if (fs.existsSync(p)) {
-        const loaded = nativeImage.createFromPath(p);
-        if (!loaded.isEmpty()) {
-          icon = loaded;
-          break;
+      let icon = nativeImage.createEmpty();
+      for (const p of candidatePaths) {
+        if (fs.existsSync(p)) {
+          const loaded = nativeImage.createFromPath(p);
+          if (!loaded.isEmpty()) {
+            icon = loaded;
+            break;
+          }
         }
       }
+
+      if (icon.isEmpty()) {
+        icon = nativeImage.createFromDataURL(FALLBACK_TRAY_ICON_DATA);
+      }
+
+      this.tray = new Tray(icon.resize({ width: 16, height: 16 }));
+      this.tray.setToolTip('RenegadeSwarm - Seeding AI Models');
+      this.updateContextMenu('0 active downloads | 0 seeding');
+
+      this.tray.on('double-click', () => {
+        this.toggleWindow();
+      });
+      this.tray.on('click', () => {
+        this.toggleWindow();
+      });
+    } catch (err: any) {
+      console.warn('[TrayManager] Could not initialize system tray icon:', err?.message || err);
     }
-
-    if (icon.isEmpty()) {
-      icon = nativeImage.createFromDataURL(FALLBACK_TRAY_ICON_DATA);
-    }
-
-    this.tray = new Tray(icon.resize({ width: 16, height: 16 }));
-    this.tray.setToolTip('RenegadeSwarm - Seeding AI Models');
-    this.updateContextMenu('0 active downloads | 0 seeding');
-
-    this.tray.on('double-click', () => {
-      this.toggleWindow();
-    });
-    this.tray.on('click', () => {
-      this.toggleWindow();
-    });
   }
 
   updateContextMenu(statusText: string, speedText?: string, ratioText?: string) {

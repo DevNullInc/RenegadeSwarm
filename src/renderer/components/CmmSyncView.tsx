@@ -61,6 +61,7 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [pendingModelIds, setPendingModelIds] = useState<Set<string>>(new Set());
 
   // Sync inputs when auto-detected or updated from background bridge
   useEffect(() => {
@@ -354,12 +355,40 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                           {onToggleModelShare && (
                             <button
-                              onClick={() => onToggleModelShare(m.id, !optedIn)}
+                              onClick={async () => {
+                                if (pendingModelIds.has(m.id)) return;
+                                setPendingModelIds((prev) => new Set(prev).add(m.id));
+                                try {
+                                  await onToggleModelShare(m.id, !optedIn);
+                                } finally {
+                                  setPendingModelIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.delete(m.id);
+                                    return next;
+                                  });
+                                }
+                              }}
+                              disabled={pendingModelIds.has(m.id)}
                               className="btn-secondary"
-                              style={{ padding: '4px 10px', fontSize: '11px', color: optedIn ? '#f43f5e' : '#10b981' }}
-                              title={optedIn ? 'Revoke sharing permission' : 'Allow this model to be seeded'}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                color: optedIn ? '#f43f5e' : '#10b981',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                opacity: pendingModelIds.has(m.id) ? 0.7 : 1,
+                              }}
+                              title={optedIn ? 'Revoke sharing permission and stop seeding' : 'Immediately package and seed this model in the swarm'}
                             >
-                              {optedIn ? 'Opt-Out' : 'Opt-In'}
+                              {pendingModelIds.has(m.id) ? (
+                                <>
+                                  <RefreshCw size={11} className="spin" />
+                                  <span>{optedIn ? 'Stopping...' : 'Seeding...'}</span>
+                                </>
+                              ) : (
+                                optedIn ? 'Opt-Out' : 'Opt-In'
+                              )}
                             </button>
                           )}
                           <button

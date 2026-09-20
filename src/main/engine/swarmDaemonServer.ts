@@ -243,9 +243,20 @@ export class SwarmDaemonServer {
         }
 
         if (this.mainWindow) {
-          if (this.mainWindow.isMinimized()) this.mainWindow.restore();
-          this.mainWindow.show();
-          this.mainWindow.focus();
+          try {
+            if (typeof (this.mainWindow as any).isVisible === 'function' && !(this.mainWindow as any).isVisible()) {
+              (this.mainWindow as any).show();
+            }
+            if (typeof (this.mainWindow as any).isMinimized === 'function' && (this.mainWindow as any).isMinimized()) {
+              (this.mainWindow as any).restore();
+            }
+            if (typeof (this.mainWindow as any).show === 'function') {
+              (this.mainWindow as any).show();
+            }
+            if (typeof (this.mainWindow as any).focus === 'function') {
+              (this.mainWindow as any).focus();
+            }
+          } catch { }
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Window activated' }));

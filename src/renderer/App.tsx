@@ -416,6 +416,8 @@ export default function App() {
       if (res.success && res.data?.policy) {
         setSharingPolicy(res.data.policy);
       }
+      await fetchTorrents();
+      await fetchSharingPolicy();
     } else {
       // Local state fallback for mock preview
       const opted = new Set(sharingPolicy.optedInModelIds);

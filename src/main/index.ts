@@ -26,12 +26,32 @@ import { swarmDaemonServer } from './engine/swarmDaemonServer';
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 
+app.setName('renegadeswarm');
+if (process.platform === 'win32') {
+  app.setAppUserModelId('net.renegadeinc.renegadeswarm');
+}
+
+// Ensure unique userData directory to prevent single-instance lock collisions with sibling Electron apps
+try {
+  const baseAppData =
+    process.env.APPDATA ||
+    (process.platform === 'darwin'
+      ? path.join(process.env.HOME || '', 'Library', 'Application Support')
+      : path.join(process.env.HOME || '', '.config'));
+  const userDataDir = path.join(baseAppData, 'RenegadeSwarm');
+  app.setPath('userData', userDataDir);
+} catch (e) {
+  console.warn('[Swarm] Could not set custom userData directory:', e);
+}
+
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
+  console.warn('[Swarm] Another instance is already running. Exiting.');
   app.quit();
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show();
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.show();
       mainWindow.focus();
