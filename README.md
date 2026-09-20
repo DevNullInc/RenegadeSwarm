@@ -7,7 +7,7 @@
 [![Sponsor: DevNullInc](https://img.shields.io/badge/Sponsor-DevNullInc-ea4aaa.svg?logo=github-sponsors)](https://github.com/sponsors/DevNullInc)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178c6.svg)](https://www.typescriptlang.org/)
 [![Electron](https://img.shields.io/badge/Electron-34+-47848F.svg)](https://www.electronjs.org/)
-[![Tests](https://img.shields.io/badge/Tests-124%20Passed-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Tests-150%20Passed-brightgreen.svg)](tests/)
 [![Security: Sandboxed](https://img.shields.io/badge/Security-Zero--Trust%20Quarantine-success.svg)](docs/MANIFEST_SPEC.md)
 
 ---
@@ -111,7 +111,7 @@ RenegadeSwarm is built exclusively for AI models. It inspects all payloads at th
 | **Anti-Abuse Key Lockout Safeguard** | Mandatory 24-hour regeneration cooldown prevents bad actors from cycling identities or evading community blacklists. |
 | **50GB+ Memory-Safe Streaming** | Tuned random-access disk streaming with pre-write in-memory SHA256 chunk verification prevents buffer fragmentation on multi-gigabyte models. |
 | **Zero-Masquerade Content Validation** | Deep magic-byte inspection strictly validates SafeTensors, GGUF, ONNX, and PyTorch headers while rejecting executables, scripts, media, and polyglots. |
-| **Atomic RenegadeCMM Bridge** | SQLite `ATTACH DATABASE` synchronization commits downloads directly into ComfyUI folder structures (`checkpoints/`, `loras/`, `vae/`) with zero sync lag. |
+| **Atomic RenegadeCMM Bridge & Sister Protocol** | Dual-channel integration via SQLite `ATTACH DATABASE` and authenticated loopback HTTP bridge (`127.0.0.1:5180` $\leftrightarrow$ `5174`) with 5-probe rate-limiting budget and Sister Wakeup Protocol. |
 | **BEP 19 Web Seed Bootstrapping** | New swarms bootstrap immediately from Hugging Face or CivitAI HTTP endpoints while transitioning seamlessly into decentralized P2P sharing. |
 | **Cyberpunk Desktop UI & Settings** | Dark-themed responsive dashboard with live swarm telemetry, background tray seeding, ratio governance, and complete Web of Trust settings. |
 
@@ -144,6 +144,7 @@ RenegadeSwarm/
 │   │   ├── ipcHandlers.ts      # Zod-validated IPC handler registry
 │   │   ├── tray.ts             # System tray manager for 24/7 background seeding
 │   │   ├── engine/             # P2P Engine & Storage Layer
+│   │   │   ├── swarmDaemonServer.ts  # Loopback HTTP daemon (:5180) & Sister Wakeup handler
 │   │   │   ├── packageJobManager.ts  # Persistent background packaging job manager
 │   │   │   ├── discoveryEngine.ts    # P2P model search aggregator & WoT scorer
 │   │   │   ├── keyringManager.ts     # Keyring persistence & anti-abuse lockout governor
@@ -161,7 +162,7 @@ RenegadeSwarm/
 │   │   ├── metadata/           # Multi-Tier Model Metadata Extractor
 │   │   │   └── modelMetadataExtractor.ts # SafeTensors uint64 header, CMM DB & CivitAI scraper
 │   │   └── cmm/                # RenegadeCMM Integration
-│   │       ├── cmmDbBridge.ts        # Non-blocking SQLite bridge with ATTACH DATABASE
+│   │       ├── cmmDbBridge.ts        # Non-blocking SQLite bridge with ATTACH & HTTP auto-detection
 │   │       └── cmmFolderRouter.ts    # ComfyUI directory router & traversal protection
 │   ├── shared/                 # Shared contracts & types between main and renderer
 │   │   ├── cmmTypes.ts         # ComfyUI folders, file types, security whitelists
@@ -171,7 +172,7 @@ RenegadeSwarm/
 │       ├── App.tsx             # Main application layout & live telemetry coordinator
 │       ├── components/         # DiscoveryView, Dashboard, Seeder, AmberWarningModal, CMM Bridge, Settings
 │       └── styles/             # Design tokens & glassmorphism styling
-├── tests/                      # Vitest test suite (22 suites, 106 unit & integration tests)
+├── tests/                      # Vitest test suite (29 suites, 150 unit & integration tests)
 ```
 
 ---
@@ -180,7 +181,7 @@ RenegadeSwarm/
 
 To give users and creators 100% peace of mind, RenegadeSwarm undergoes multi-layered automated verification, defensive SecOps audits, and penetration testing across all layers of the codebase:
 
-### 1. Comprehensive Test Suite (106 Passing Tests / 22 Suites)
+### 1. Comprehensive Test Suite (150 Passing Tests / 29 Suites)
 Every commit is validated through automated integration and unit test matrices covering:
 * **Ed25519 Cryptographic Provenance & Keyring Vault** (`tests/ed25519Signing.test.ts`, `tests/keyringManager.test.ts`): Signature generation, machine-bound AES-256-GCM encryption at rest, anti-abuse 24h lockout enforcement, SPKI/PKCS8 DER conversion, and tampering rejection.
 * **Zero-Masquerade Content Validation** (`tests/contentValidator.test.ts`): Verification of SafeTensors, GGUF, ONNX, and PyTorch headers; instant rejection of polyglot ZIPs (`PK\x03\x04`), Windows MZ (`4D 5A`), Linux ELF (`7F 45 4C 46`), Mach-O, Shebang scripts (`#!`), and MP4/MKV video containers.

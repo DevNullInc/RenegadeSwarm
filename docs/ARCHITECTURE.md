@@ -395,38 +395,126 @@ sequenceDiagram
 
 ---
 
-## 5. RenegadeCMM Live Database & Multi-Folder Bridge
+## 5. RenegadeCMM Integration & Inter-Process Communication Bridge
 
-RenegadeSwarm is designed to integrate natively with **RenegadeCMM** without running intermediate HTTP microservices or duplicate index databases:
+RenegadeSwarm integrates with **RenegadeCMM** through a dual-channel architecture: direct local SQLite synchronization for low-overhead database queries, paired with an authenticated loopback HTTP bridge for live coordination, auto-configuration, and asynchronous event signaling.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                           SQLite ATTACH ARCHITECTURE                         │
-│                                                                              │
-│   ┌───────────────────────────────┐      ┌───────────────────────────────┐   │
-│   │     renegadeswarm.sqlite      │      │     renegadecmm.sqlite        │   │
-│   │  (Active Swarm Transfers,     │ ATTACH (Discovered ComfyUI Models,   │   │
-│   │   App Settings, Bandwidth)    │ ───►  Local Model Hashes, Config)    │   │
-│   └───────────────────────────────┘      └───────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 DUAL-CHANNEL CMM BRIDGE                                │
+│                                                                                        │
+│   ┌────────────────────────────────┐                 ┌─────────────────────────────┐   │
+│   │   RenegadeSwarm Daemon         │                 │   RenegadeCMM Native        │   │
+│   │   127.0.0.1:5180               │                 │   127.0.0.1:5174            │   │
+│   │   (Shared daemon.token)        │                 │   (Shared daemon.token)     │   │
+│   └───────────────┬────────────────┘                 └──────────────┬──────────────┘   │
+│                   │                                                 │                  │
+│                   │◄── POST /api/sister/wakeup (400ms poke) ───────┤                  │
+│                   ├─── POST /api/sister/wakeup (400ms poke) ───────►│                  │
+│                   │                                                 │                  │
+│                   │─── GET /api/config & /api/status (Bearer) ─────►│                  │
+│                   │                                                 │                  │
+│   ┌───────────────▼────────────────┐                 ┌──────────────▼──────────────┐   │
+│   │      renegadeswarm.sqlite      │  SQLite ATTACH  │     renegadecmm.sqlite      │   │
+│   │   (Transfers, WoT, Metrics)    │ ───────────────►│   (Model Index, Metadata)   │   │
+│   └────────────────────────────────┘                 └─────────────────────────────┘   │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Atomic Dual-Database Querying**:
-   - The client runs `ATTACH DATABASE 'D:/gitprojects/RenegadeCMM/renegadecmm.sqlite' AS cmm;`.
-   - Queries model hashes and ComfyUI directory configurations with sub-millisecond local SQLite joins.
-2. **Multi-Folder Routing (`src/main/cmm/cmmFolderRouter.ts`)**:
-   - Detects all folders defined in CMM's `app_config` (`comfyui_folders`, `comfyui_root`, `folder_mappings`).
-   - Routes incoming files automatically to canonical subdirectories based on model type:
-     - Checkpoints / Models $\rightarrow$ `checkpoints/`
-     - LoRAs $\rightarrow$ `loras/`
+### 5.1 Dual-Database SQLite Synchronization (`ATTACH DATABASE`)
+1. **Zero-Lag Shared Reading**:
+   - The main process issues `ATTACH DATABASE '<resolved_path>/renegadecmm.sqlite' AS cmm;`.
+   - Queries model hashes, file sizes, and ComfyUI directory configurations with sub-millisecond local SQLite joins.
+2. **WAL Concurrency**:
+   - RenegadeSwarm requires both `renegadeswarm.sqlite` and `renegadecmm.sqlite` to operate with `PRAGMA journal_mode = WAL;`. Write-Ahead Logging allows concurrent readers and writers across separate processes without lock contention.
+
+### 5.2 Multi-Folder Routing & Canonical Model Naming
+1. **Folder Category Router (`src/main/cmm/cmmFolderRouter.ts`)**:
+   - Reads target directory hierarchies configured in CMM (`comfyui_folders`, `comfyui_root`, `folder_mappings`).
+   - Routes completed model payloads to their canonical subdirectories:
+     - Checkpoints / Base Models $\rightarrow$ `checkpoints/`
+     - LoRAs / LyCORIS $\rightarrow$ `loras/`
      - UNet Weights $\rightarrow$ `unet/`
      - VAE Models $\rightarrow$ `vae/`
      - Text Encoders / CLIP $\rightarrow$ `text_encoders/`
      - ControlNet $\rightarrow$ `controlnet/`
      - Upscalers $\rightarrow$ `upscale_models/`
-3. **Canonical Filename Enforcement**:
-   - Standardizes filenames to prevent collisions:
+2. **Canonical Filename Enforcement**:
+   - Standardizes filenames to ensure cross-application parity:
      $$\text{formatCmmCanonicalFileName}(\text{title}, \text{creator}, \text{ext}) \Longrightarrow \text{title\_creator.ext}$$
+
+### 5.3 Loopback HTTP Daemon Bridge
+RenegadeSwarm runs an internal HTTP daemon server (`src/main/engine/swarmDaemonServer.ts`) bound exclusively to `127.0.0.1:5180`.
+
+| Endpoint | Method | Auth Required | Purpose |
+|---|---|---|---|
+| `/api/health` | `GET` | No | Heartbeat, version check, and active transfer count. |
+| `/api/window/focus` | `POST` | Yes (`Bearer <token>`) | Brings the desktop application window to foreground. |
+| `/api/cmm/status` | `GET` | Yes (`Bearer <token>`) | Returns bridge health, sister detection state, and database path. |
+| `/api/sister/wakeup` | `POST` | Yes (`Bearer <token>`) | Handles sister-process boot signals and resets health budgets. |
+| `/api/ingest` | `POST` | Yes (`Bearer <token>`) | Ingests torrents or `.swarm` manifests sent from external tools. |
+
+**Security Controls**:
+- **Loopback Enforcement**: Binds strictly to `127.0.0.1`. Requests originating from non-loopback addresses or non-whitelisted `Origin` / `Referer` headers are rejected with `403 Forbidden`.
+- **Bearer Token Authentication**: All mutating endpoints require an `Authorization: Bearer <token>` header. Tokens are 32-byte cryptographically secure hex strings read from the local file system (`%APPDATA%\RenegadeSwarm\daemon.token` or `~/.renegadeswarm/daemon.token`) with timing-safe comparison.
+
+### 5.4 The Sister Wakeup Protocol
+When two sister desktop applications (RenegadeSwarm and RenegadeCMM) run concurrently, one application inevitably initializes before the other. The Sister Wakeup Protocol solves startup race conditions without unbounded polling loops:
+
+```
+┌─────────────────┐                                            ┌─────────────────┐
+│ RenegadeSwarm   │                                            │ RenegadeCMM     │
+│ (Starts Second) │                                            │ (Already Idle)  │
+└────────┬────────┘                                            └────────┬────────┘
+         │                                                              │
+         │ 1. Daemon listening on :5180, token written to disk          │
+         │                                                              │
+         │ 2. POST http://127.0.0.1:5174/api/sister/wakeup              │
+         │    Authorization: Bearer <token>                             │
+         │    Body: { "source": "swarm", "ts": 1726848000000 }          │
+         ├─────────────────────────────────────────────────────────────►│
+         │                                                              │ 3. Receives poke
+         │                                                              │ 4. Resets probe budget
+         │                                                              │ 5. GET :5180/api/health
+         │                                                              │ 6. Updates UI badge
+         │                                                              │
+         │◄──────────────── 200 OK { "acknowledged": true } ────────────┤
+         │                                                              │
+```
+
+- **One-Shot Poke**: Upon server startup, Swarm fires a single `POST http://127.0.0.1:5174/api/sister/wakeup` with a strict **400ms timeout**.
+- **Error Swallowing**: If CMM is offline, the network timeout or connection refusal is silently caught without delaying application startup.
+- **Bidirectional Symmetry**: When CMM boots after Swarm, CMM sends `POST http://127.0.0.1:5180/api/sister/wakeup`. Swarm's daemon server verifies the Bearer token, resets its internal probe counters, immediately records CMM as online, and syncs status.
+
+### 5.5 5-Probe Rate-Limiting Budget & Sleep State Machine
+To prevent background CPU wakeups and wasted network I/O when CMM is not running, RenegadeSwarm enforces a finite polling budget:
+
+```
+[Polling Active] ──(Probe Fails)──► [Increment probeCount]
+       ▲                                     │
+       │                                     │ (probeCount >= 5)
+       │                                     ▼
+[Reset probeCount = 0] ◄────────────── [Enter Sleep State: isAsleep = true]
+       ▲                                 • Stop automatic polling timers
+       │                                 • Render "CMM Offline (Re-ping)" UI
+       │
+  (User Clicks "Re-ping" OR Incoming Sister Wakeup Poke)
+```
+
+1. **Active Budget**: The bridge performs periodic health checks against `http://127.0.0.1:5174/api/status`.
+2. **Exhaustion & Dormancy**: If 5 consecutive probes fail, the subsystem transitions to `isAsleep = true` and halts all polling intervals.
+3. **Re-Awakening Triggers**:
+   - **Manual Re-Ping**: The user clicks the **CMM Offline (Re-ping)** badge or button in the UI, resetting `probeCount = 0`.
+   - **Sister Wakeup Poke**: An incoming `POST /api/sister/wakeup` from CMM clears the dormancy state immediately.
+
+### 5.6 Live HTTP Auto-Detection & Fallback Discovery
+The `cmm:autoDetect` IPC handler orchestrates dynamic path resolution:
+1. **Live HTTP Probe**: Queries `http://127.0.0.1:5174/api/config` and `/api/status` with Bearer auth to extract CMM's live `db_path`, `comfyui_root`, and directory mappings directly from the running instance.
+2. **Filesystem Fallback Matrix**: If CMM is offline, Swarm scans candidate platform locations:
+   - Windows Local AppData: `%LOCALAPPDATA%\Programs\renegade-cmm\resources\renegadecmm.sqlite`
+   - Windows AppData: `%APPDATA%\RenegadeCMM\renegadecmm.sqlite`
+   - Development Workspaces: Standard repo sibling paths (`../RenegadeCMM/renegadecmm.sqlite`, `D:/gitprojects/RenegadeCMM/renegadecmm.sqlite`)
+   - Custom Saved Configurations: Persisted path in `renegadeswarm.sqlite` settings.
 
 ---
 
@@ -458,11 +546,8 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 [.quarantine/*.part Staging on Disk]
        │ (Pass 100% Download)
        ▼
-[Full-File Streaming SHA256 Verification]
-       │ (Pass)
-       ▼
-[Multi-Pass Magic-Byte & Anti-Executable Inspection]
-       │ (SafeTensors / GGUF Validated)
+[Multi-Pass Content & Anti-Polyglot Inspection]
+       │ (Pass Magic Bytes, No Executable Header, No ZIP bomb)
        ▼
 [Atomic Promotion to ComfyUI Directory & CMM Commit]
 ```
@@ -485,6 +570,7 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 | Path | Primary Responsibility |
 |---|---|
 | [`src/main/engine/swarmEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/swarmEngine.ts) | Central swarm orchestrator; manages active downloads, seeding, and bandwidth loop. |
+| [`src/main/engine/swarmDaemonServer.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/swarmDaemonServer.ts) | Loopback HTTP bridge (`127.0.0.1:5180`) handling health, sister wakeup, window focus, and manifest ingestion APIs. |
 | [`src/main/engine/daemonRpcEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/daemonRpcEngine.ts) | JSON-RPC client for local BitTorrent daemon (Transmission / rqbit sidecar) with CSRF 409 session handshake negotiation. |
 | [`src/main/engine/packageJobManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/packageJobManager.ts) | Persistent background packaging job manager with phase state machine, chunk progress streaming, and tab-switching persistence. |
 | [`src/main/engine/discoveryEngine.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/discoveryEngine.ts) | BEP 10 P2P model discovery aggregator, peer query broadcaster, and Web of Trust scorer. |
@@ -494,7 +580,7 @@ Before any file is promoted into your active ComfyUI library, it must pass 4 con
 | [`src/main/engine/dhtHardening.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/dhtHardening.ts) | BEP 42 Sybil protection, query rate-limiting (<5KB/s), and pinned swarm tracking. |
 | [`src/main/engine/keyringManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/keyringManager.ts) | Ed25519 identity generation, 15-minute anti-abuse lockout, and keyring storage. |
 | [`src/main/engine/sharingPolicyManager.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/engine/sharingPolicyManager.ts) | Evaluates Opt-In model sharing rules, NSFW policies, and path exclusion filters. |
-| [`src/main/cmm/cmmDbBridge.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/cmm/cmmDbBridge.ts) | SQLite `ATTACH DATABASE` bridge with `renegadecmm.sqlite` for direct local model sync. |
+| [`src/main/cmm/cmmDbBridge.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/cmm/cmmDbBridge.ts) | SQLite `ATTACH DATABASE` bridge with `renegadecmm.sqlite` and live HTTP configuration auto-detection. |
 | [`src/main/cmm/cmmFolderRouter.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/cmm/cmmFolderRouter.ts) | Discovers and routes downloads into multiple ComfyUI model directories. |
 | [`src/main/metadata/modelMetadataExtractor.ts`](file:///d:/gitprojects/RenegadeSwarm/src/main/metadata/modelMetadataExtractor.ts) | LLM detection, CivitAI hash querying, HTML sterilization, and SFW preview extraction. |
 | [`src/protocol/wireProtocol.ts`](file:///d:/gitprojects/RenegadeSwarm/src/protocol/wireProtocol.ts) | Binary BitTorrent handshake and wire protocol framing serialization/parsing. |

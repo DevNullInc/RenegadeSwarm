@@ -36,14 +36,29 @@ RenegadeSwarm uses a strict multi-pass validation gate before any file is promot
 
 ## 3. RenegadeCMM Bridge Integration
 
-### Symptom: "CMM Bridge Offline" or Database Locked
+### Symptom: "CMM Bridge Offline" or "Database Locked"
 - **Potential Causes**:
-  - `renegadecmm.sqlite` path is incorrect.
+  - `renegadecmm.sqlite` path is incorrect or points to a non-existent directory.
   - Another process has acquired an exclusive SQLite write lock outside WAL mode.
 - **Resolution Steps**:
-  1. **Configure Path**: Open the **RenegadeCMM Bridge** tab and confirm the absolute path to your `renegadecmm.sqlite` database.
-  2. **Check SQLite WAL Mode**: Ensure RenegadeCMM is configured with `PRAGMA journal_mode = WAL;`. WAL mode allows concurrent reads and writes across both applications without blocking.
-  3. **File Permissions**: Verify that the user account running RenegadeSwarm has read/write permissions to the `.sqlite`, `.sqlite-wal`, and `.sqlite-shm` files.
+  1. **Auto-Detect Configuration**: Open the **RenegadeCMM Bridge** tab and click **Auto-Detect from CMM**. If RenegadeCMM is running, Swarm will query `http://127.0.0.1:5174/api/config` and populate database and model paths automatically.
+  2. **Manual Path Verification**: If CMM is offline, enter the absolute path to your `renegadecmm.sqlite` database manually and click **Test Connection**.
+  3. **Check SQLite WAL Mode**: Ensure RenegadeCMM is configured with `PRAGMA journal_mode = WAL;`. WAL mode allows concurrent reads and writes across both applications without blocking.
+  4. **File Permissions**: Verify that the user account running RenegadeSwarm has read/write permissions to the `.sqlite`, `.sqlite-wal`, and `.sqlite-shm` files.
+
+### Symptom: UI Shows "CMM Offline (Re-ping)" (5-Probe Rate-Limiting Dormancy)
+- **Expected Behavior**: To prevent CPU and network wakeups when RenegadeCMM is closed, RenegadeSwarm caps background status probes to **5 consecutive failed attempts**. After 5 failures, polling stops and enters a sleep state (`isAsleep = true`).
+- **Resolution Steps**:
+  1. Launch **RenegadeCMM**. When CMM finishes starting, its startup sequence automatically issues an authenticated `POST /api/sister/wakeup` to port `5180`, which clears Swarm's sleep state immediately.
+  2. Alternatively, click the **CMM Offline (Re-ping)** badge or button in the navbar/bridge view to manually reset the 5-probe budget and re-test connectivity.
+
+### Symptom: Sister Wakeup Not Acknowledged (Port 5174 / 5180)
+- **Potential Causes**:
+  - `daemon.token` mismatch between RenegadeSwarm and RenegadeCMM.
+  - Local firewall or anti-virus blocking loopback communication on ports `5180` or `5174`.
+- **Resolution Steps**:
+  1. **Verify Token Existence**: Confirm that `daemon.token` exists in `%APPDATA%\RenegadeSwarm\daemon.token` (Windows) or `~/.renegadeswarm/daemon.token` (Linux/macOS).
+  2. **Check Port Availability**: Ensure no other application has bound to TCP ports `5180` (Swarm Daemon) or `5174` (CMM Native Server).
 
 ---
 
