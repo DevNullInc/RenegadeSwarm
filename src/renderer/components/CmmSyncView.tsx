@@ -16,15 +16,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react';
-import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert, DownloadCloud, ExternalLink, Wand2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Database, FolderTree, RefreshCw, CheckCircle, Lock, Globe, ShieldAlert, DownloadCloud, ExternalLink, Wand2, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { CmmLocalModelRow } from '../../main/cmm/cmmDbBridge';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../../protocol/sharingPolicy';
+import { SwarmTorrentStatus } from '../../protocol/types';
+import { TabId } from './Navbar';
+import { TabDebugDrawer } from './TabDebugDrawer';
+
+export type CmmSortField = 'name' | 'type' | 'size' | 'privacy';
+export type CmmSortDirection = 'asc' | 'desc';
 
 interface CmmSyncViewProps {
   cmmDbPath: string;
   comfyModelsRoot: string;
   models: CmmLocalModelRow[];
+  activeTorrents?: SwarmTorrentStatus[];
   sharingPolicy?: SharingPolicySettings;
   cmmConnected?: boolean;
   cmmDiscovered?: boolean;
@@ -36,13 +43,16 @@ interface CmmSyncViewProps {
   onRefreshModels: () => Promise<void>;
   onQuickSeed: (model: CmmLocalModelRow) => void;
   onToggleModelShare?: (modelId: string, optIn: boolean) => Promise<void>;
+  onNavigateTab?: (tab: TabId) => void;
   onInstallCmm?: () => void;
+  devMode?: boolean;
 }
 
 export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   cmmDbPath,
   comfyModelsRoot,
   models,
+  activeTorrents = [],
   sharingPolicy = DEFAULT_SHARING_POLICY,
   cmmConnected = false,
   cmmDiscovered = false,
@@ -54,14 +64,20 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
   onRefreshModels,
   onQuickSeed,
   onToggleModelShare,
+  onNavigateTab,
   onInstallCmm,
+  devMode = false,
 }) => {
-  const [dbPathInput, setDbPathInput] = useState(cmmDbPath || 'D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
-  const [modelsRootInput, setModelsRootInput] = useState(comfyModelsRoot || 'D:\\ComfyUI\\models');
+  const [dbPathInput, setDbPathInput] = useState(cmmDbPath || '');
+  const [modelsRootInput, setModelsRootInput] = useState(comfyModelsRoot || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isAutoDetecting, setIsAutoDetecting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [pendingModelIds, setPendingModelIds] = useState<Set<string>>(new Set());
+
+  // Sorting state
+  const [sortField, setSortField] = useState<CmmSortField>('name');
+  const [sortDirection, setSortDirection] = useState<CmmSortDirection>('asc');
 
   // Sync inputs when auto-detected or updated from background bridge
   useEffect(() => {
@@ -136,6 +152,54 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
       if (prefix && model.file_name.toLowerCase().startsWith(prefix.toLowerCase())) return true;
     }
     return false;
+  };
+
+  const handleSort = (field: CmmSortField) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedModels = useMemo(() => {
+    const list = [...models];
+    return list.sort((a, b) => {
+      let comparison = 0;
+      if (sortField === 'name') {
+        const nameA = (a.civitai_name || a.file_name || '').toLowerCase();
+        const nameB = (b.civitai_name || b.file_name || '').toLowerCase();
+        comparison = nameA.localeCompare(nameB);
+      } else if (sortField === 'type') {
+        const typeA = (a.model_type || 'Model').toLowerCase();
+        const typeB = (b.model_type || 'Model').toLowerCase();
+        comparison = typeA.localeCompare(typeB);
+      } else if (sortField === 'size') {
+        const sizeA = Number(a.file_size || 0);
+        const sizeB = Number(b.file_size || 0);
+        comparison = sizeA - sizeB;
+      } else if (sortField === 'privacy') {
+        const getRank = (m: CmmLocalModelRow) => {
+          if (isModelBlocked(m)) return 0;
+          if (isModelOptedIn(m.id)) return 2;
+          return 1;
+        };
+        comparison = getRank(a) - getRank(b);
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [models, sortField, sortDirection, sharingPolicy]);
+
+  const renderSortIcon = (field: CmmSortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown size={12} style={{ opacity: 0.35, marginLeft: '6px', verticalAlign: 'middle' }} />;
+    }
+    return sortDirection === 'asc' ? (
+      <ArrowUp size={13} color="#06b6d4" style={{ marginLeft: '6px', verticalAlign: 'middle' }} />
+    ) : (
+      <ArrowDown size={13} color="#06b6d4" style={{ marginLeft: '6px', verticalAlign: 'middle' }} />
+    );
   };
 
   return (
@@ -303,17 +367,57 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', textAlign: 'left', position: 'sticky', top: 0, background: 'var(--bg-surface)', zIndex: 1 }}>
-                  <th style={{ padding: '8px 12px' }}>File / Model Name</th>
-                  <th style={{ padding: '8px 12px', width: '120px' }}>Type</th>
-                  <th style={{ padding: '8px 12px', width: '100px' }}>Size</th>
-                  <th style={{ padding: '8px 12px', width: '200px' }}>Sharing Privacy</th>
-                  <th style={{ padding: '8px 12px', width: '160px', textAlign: 'right' }}>Actions</th>
+                  <th
+                    className="sortable-th"
+                    onClick={() => handleSort('name')}
+                    style={{ color: sortField === 'name' ? '#22d3ee' : undefined }}
+                    title="Click to sort by File / Model Name"
+                  >
+                    <span>File / Model Name</span>
+                    {renderSortIcon('name')}
+                  </th>
+                  <th
+                    className="sortable-th"
+                    onClick={() => handleSort('type')}
+                    style={{ width: '130px', color: sortField === 'type' ? '#22d3ee' : undefined }}
+                    title="Click to sort by Model Type"
+                  >
+                    <span>Type</span>
+                    {renderSortIcon('type')}
+                  </th>
+                  <th
+                    className="sortable-th"
+                    onClick={() => handleSort('size')}
+                    style={{ width: '110px', color: sortField === 'size' ? '#22d3ee' : undefined }}
+                    title="Click to sort by File Size"
+                  >
+                    <span>Size</span>
+                    {renderSortIcon('size')}
+                  </th>
+                  <th
+                    className="sortable-th"
+                    onClick={() => handleSort('privacy')}
+                    style={{ width: '210px', color: sortField === 'privacy' ? '#22d3ee' : undefined }}
+                    title="Click to sort by Sharing Privacy Status"
+                  >
+                    <span>Sharing Privacy</span>
+                    {renderSortIcon('privacy')}
+                  </th>
+                  <th style={{ padding: '10px 12px', width: '160px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {models.map((m) => {
+                {sortedModels.map((m) => {
                   const optedIn = isModelOptedIn(m.id);
                   const blocked = isModelBlocked(m);
+
+                  const normPath = m.file_path ? m.file_path.replace(/\\/g, '/').toLowerCase() : '';
+                  const isSeeding = activeTorrents.some((t) => {
+                    const tPath = t.savePath ? t.savePath.replace(/\\/g, '/').toLowerCase() : '';
+                    const matchHash = m.sha256 && t.infoHash.toLowerCase() === m.sha256.toLowerCase();
+                    const matchPath = normPath && (tPath === normPath || tPath.endsWith('/' + m.file_name.toLowerCase()) || (t.title && normPath.endsWith('/' + t.title.toLowerCase())));
+                    return (t.state === 'seeding' || t.state === 'downloading' || t.state === 'paused') && (matchHash || matchPath);
+                  });
 
                   return (
                     <tr key={m.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
@@ -339,10 +443,15 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
                             <ShieldAlert size={12} />
                             <span>Private / Filtered</span>
                           </span>
-                        ) : optedIn ? (
+                        ) : isSeeding ? (
                           <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <Globe size={12} />
-                            <span>Opted-In (Seeding)</span>
+                            <span>Seeding (Active)</span>
+                          </span>
+                        ) : optedIn ? (
+                          <span className="badge" style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <Globe size={12} />
+                            <span>Opted-In</span>
                           </span>
                         ) : (
                           <span className="badge" style={{ background: 'rgba(255, 255, 255, 0.06)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -352,14 +461,40 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                          {onToggleModelShare && (
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px' }}>
+                          {isSeeding ? (
+                            <button
+                              onClick={() => {
+                                if (onNavigateTab) onNavigateTab('seeder');
+                                else onQuickSeed(m);
+                              }}
+                              className="btn-secondary"
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                background: 'rgba(16, 185, 129, 0.15)',
+                                color: '#10b981',
+                                borderColor: 'rgba(16, 185, 129, 0.35)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                cursor: 'pointer',
+                              }}
+                              title="Currently active in swarm. Click to open Seeder window to manage, pause, or stop seeding."
+                            >
+                              <Globe size={11} className="spin" style={{ animationDuration: '4s' }} />
+                              <span>Seeding</span>
+                              <ExternalLink size={10} style={{ opacity: 0.8 }} />
+                            </button>
+                          ) : (
                             <button
                               onClick={async () => {
                                 if (pendingModelIds.has(m.id)) return;
                                 setPendingModelIds((prev) => new Set(prev).add(m.id));
                                 try {
-                                  await onToggleModelShare(m.id, !optedIn);
+                                  if (onToggleModelShare) {
+                                    await onToggleModelShare(m.id, !optedIn);
+                                  }
                                 } finally {
                                   setPendingModelIds((prev) => {
                                     const next = new Set(prev);
@@ -373,21 +508,22 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
                               style={{
                                 padding: '4px 10px',
                                 fontSize: '11px',
-                                color: optedIn ? '#f43f5e' : '#10b981',
+                                color: optedIn ? '#10b981' : 'var(--text-main)',
+                                borderColor: optedIn ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '4px',
                                 opacity: pendingModelIds.has(m.id) ? 0.7 : 1,
                               }}
-                              title={optedIn ? 'Revoke sharing permission and stop seeding' : 'Immediately package and seed this model in the swarm'}
+                              title={optedIn ? 'Status: Opted-In. Click to revoke opt-in, or click "Package" to seed.' : 'Click to opt-in this model for sharing, then click "Package" to seed.'}
                             >
                               {pendingModelIds.has(m.id) ? (
-                                <>
-                                  <RefreshCw size={11} className="spin" />
-                                  <span>{optedIn ? 'Stopping...' : 'Seeding...'}</span>
-                                </>
+                                <RefreshCw size={11} className="spin" />
                               ) : (
-                                optedIn ? 'Opt-Out' : 'Opt-In'
+                                <>
+                                  <span>{optedIn ? 'Opted-In' : 'Opt-In'}</span>
+                                  <span style={{ color: optedIn ? '#10b981' : 'var(--accent-primary, #6366f1)', fontWeight: 'bold' }}>➔</span>
+                                </>
                               )}
                             </button>
                           )}
@@ -395,6 +531,7 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
                             onClick={() => onQuickSeed(m)}
                             className="btn-primary"
                             style={{ padding: '4px 10px', fontSize: '11px' }}
+                            title="Package and seed this model in the swarm"
                           >
                             Package
                           </button>
@@ -408,6 +545,9 @@ export const CmmSyncView: React.FC<CmmSyncViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* In-Tab Debug & Telemetry Drawer */}
+      <TabDebugDrawer tabId="cmm" devMode={devMode} tabLabel="RenegadeCMM Bridge & SQLite Database" />
     </div>
   );
 };

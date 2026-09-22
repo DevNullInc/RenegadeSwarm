@@ -231,6 +231,13 @@ export interface CmmLoopbackHealthResponse {
   timestamp: number;
 }
 
+export const TrackerStatsSchema = z.object({
+  trackersCount: z.number().int().nonnegative(),
+  blacklistCount: z.number().int().nonnegative(),
+  lastSyncTime: z.number().int().nonnegative(),
+  isSyncing: z.boolean(),
+});
+
 export type AddMagnetRequest = z.infer<typeof AddMagnetRequestSchema>;
 export type TorrentControlRequest = z.infer<typeof TorrentControlRequestSchema>;
 export type CreateSwarmPackageRequest = z.infer<typeof CreateSwarmPackageRequestSchema>;
@@ -249,5 +256,59 @@ export type OpenExternalUrlRequest = z.infer<typeof OpenExternalUrlRequestSchema
 export type PreDownloadVerifyRequest = z.infer<typeof PreDownloadVerifyRequestSchema>;
 export type DiscoverySearchRequest = z.infer<typeof DiscoverySearchRequestSchema>;
 export type CmmIngestModelRequest = z.infer<typeof CmmIngestModelRequestSchema>;
+export type TrackerStatsContract = z.infer<typeof TrackerStatsSchema>;
 
+// Debug & Diagnostics Types
+export type DiagnosticLogLevel = 'info' | 'warn' | 'error' | 'debug';
 
+export interface DiagnosticLogEvent {
+  id: string;
+  timestamp: number;
+  level: DiagnosticLogLevel;
+  subsystem: string;
+  message: string;
+  details?: any;
+  stack?: string;
+}
+
+export interface SystemDiagnostics {
+  appVersion: string;
+  platform: string;
+  electronVersion: string;
+  nodeVersion: string;
+  hardwareHashing: string;
+  peerId: string;
+  listenPort: number;
+  uptimeSeconds: number;
+  memoryUsage: {
+    rss: number;
+    heapTotal: number;
+    heapUsed: number;
+    external: number;
+  };
+  dhtNodes: number;
+  activeTrackersCount: number;
+  activeSwarmsCount: number;
+  seedingCount: number;
+  downloadingCount: number;
+  cmmConnected: boolean;
+  cmmDbPath: string;
+  cmmModelCount: number;
+  discoveryStats: {
+    connectedPeers: number;
+    localCatalogCount: number;
+    cachedDiscoveredModels: number;
+    totalQueriesProcessed: number;
+  };
+  bandwidthRates: {
+    downBps: number;
+    upBps: number;
+  };
+}
+
+export interface TabTelemetry {
+  tabId: string;
+  timestamp: number;
+  metrics: Record<string, any>;
+  recentLogs: DiagnosticLogEvent[];
+}

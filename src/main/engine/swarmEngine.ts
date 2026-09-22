@@ -35,6 +35,9 @@ import { sharingPolicyManager } from './sharingPolicyManager';
 import { DaemonRpcEngine, daemonRpcEngine, mapDaemonStatus } from './daemonRpcEngine';
 import { contentInspector } from './contentInspector';
 import { syncQueueManager } from './syncQueue';
+import { trackerManager } from './trackerManager';
+import { debugLogManager } from '../telemetry/debugLogManager';
+import { discoveryEngine, normalizeDiscoveryModelType } from './discoveryEngine';
 
 export class SwarmEngine extends EventEmitter {
   private activeSwarms: Map<string, SwarmTorrentStatus> = new Map();
@@ -42,6 +45,7 @@ export class SwarmEngine extends EventEmitter {
   private torrentIds: Map<string, number> = new Map(); // infoHash -> daemon torrent id
   private daemonRpc: DaemonRpcEngine;
   private pollTimer: NodeJS.Timeout | null = null;
+  private announceTimer: NodeJS.Timeout | null = null;
   private isInitialized = false;
 
   constructor(daemonRpc: DaemonRpcEngine = daemonRpcEngine) {
@@ -53,8 +57,16 @@ export class SwarmEngine extends EventEmitter {
     if (this.isInitialized) return;
     this.isInitialized = true;
 
+    // Initialize 24-hour background tracker and blacklist synchronization
+    await trackerManager.init().catch((err) => {
+      console.warn('[SwarmEngine] TrackerManager initialization error:', err.message);
+    });
+
     // Enforce quarantine staging for incomplete BitTorrent downloads
     await this.daemonRpc.configureQuarantineSession(syncQueueManager.getQuarantineDir()).catch(() => {});
+
+    // Restore persisted seeding and active transfers from SQLite
+    await this.restorePersistedSwarmTransfers().catch(() => {});
 
     this.pollTimer = setInterval(() => {
       this.pollDaemon().catch((_err) => {
@@ -62,7 +74,112 @@ export class SwarmEngine extends EventEmitter {
       });
     }, 1000);
 
+    // Setup recurring 60s BitTorrent tracker announce loop
+    this.announceTimer = setInterval(() => {
+      this.announceAllActiveSwarms('update').catch(() => {});
+    }, 60 * 1000);
+
+    // Initial announce broadcast for restored seeding swarms
+    setTimeout(() => {
+      debugLogManager.logInfo('SWARM', `Broadcasting initial announce for all restored swarm transfers...`);
+      this.announceAllActiveSwarms('started').catch(() => {});
+    }, 3000);
+
     await this.pollDaemon().catch(() => {});
+  }
+
+  private async restorePersistedSwarmTransfers(): Promise<void> {
+    try {
+      const records = await cmmDbBridge.getSwarmTransfers();
+      for (const rec of records) {
+        const infoHash = rec.info_hash.toLowerCase();
+        const filePath = rec.file_path;
+
+        if (!filePath || !fs.existsSync(filePath)) {
+          continue;
+        }
+
+        let manifest: SwarmManifest | null = null;
+        if (rec.manifest_json) {
+          try {
+            manifest = JSON.parse(rec.manifest_json);
+          } catch {}
+        }
+
+        if (!manifest) {
+          // Check if .swarm.json exists alongside the model file
+          const ext = path.extname(filePath);
+          const baseWithoutExt = filePath.slice(0, -ext.length);
+          const swarmFile = `${baseWithoutExt}.swarm.json`;
+          if (fs.existsSync(swarmFile)) {
+            try {
+              manifest = JSON.parse(fs.readFileSync(swarmFile, 'utf8'));
+            } catch {}
+          }
+        }
+
+        if (manifest) {
+          this.manifests.set(infoHash, manifest);
+        }
+
+        sharingPolicyManager.toggleModelOptIn(infoHash, true);
+
+        const totalBytes = manifest?.totalSizeBytes || rec.total_bytes || 0;
+        const downloadedBytes = manifest?.totalSizeBytes || rec.downloaded_bytes || totalBytes;
+        const uploadedBytes = rec.uploaded_bytes || 0;
+
+        const restoredStatus: SwarmTorrentStatus = {
+          infoHash,
+          manifestId: manifest?.manifestId || rec.manifest_id || 'unresolved',
+          title: manifest?.model?.title || rec.title || path.basename(filePath),
+          modelType: (manifest?.model?.modelType || rec.model_type || 'Checkpoint') as any,
+          baseModel: manifest?.model?.baseModel || rec.base_model,
+          state: (rec.state as any) || 'seeding',
+          queueState: 'Verified',
+          totalBytes,
+          downloadedBytes,
+          uploadedBytes,
+          downloadSpeedBps: 0,
+          uploadSpeedBps: 0,
+          progressRatio: 1.0,
+          peersConnected: 0,
+          seedersConnected: 1,
+          ratio: totalBytes > 0 ? uploadedBytes / totalBytes : 0,
+          etaSeconds: null,
+          savePath: filePath,
+          cmmSynced: Boolean(rec.cmm_synced),
+        };
+
+        this.activeSwarms.set(infoHash, restoredStatus);
+        discoveryEngine.indexLocalModel({
+          infoHash,
+          title: restoredStatus.title,
+          version: manifest?.model?.version || '1.0.0',
+          modelType: normalizeDiscoveryModelType(restoredStatus.modelType || manifest?.model?.modelType),
+          baseModel: restoredStatus.baseModel || manifest?.model?.baseModel || 'SD 1.5',
+          totalSizeBytes: totalBytes,
+          sha256: manifest?.hashes?.sha256 || infoHash,
+          creator: manifest?.model?.creator || 'Local Seeder',
+          creatorPublicKey: manifest?.model?.creatorPublicKey,
+          signature: manifest?.signature?.signature,
+          publishedAt: Date.now(),
+          tags: manifest?.model?.tags || [restoredStatus.modelType || 'Model'],
+          description: manifest?.model?.description || `Persisted local model: ${restoredStatus.title}`,
+          urlList: manifest?.urlList || [],
+          nsfw: manifest?.model?.nsfw || false,
+        });
+        debugLogManager.logInfo('SWARM', `Restored persisted seeding transfer "${restoredStatus.title}" (${infoHash.slice(0, 16)}...) at ${filePath}`, {
+          infoHash,
+          title: restoredStatus.title,
+          totalBytes,
+          state: restoredStatus.state,
+        });
+        this.emit('torrent:added', restoredStatus);
+      }
+    } catch (err: any) {
+      debugLogManager.logWarn('SWARM', `Failed to restore persisted swarm transfers: ${err.message}`);
+      console.warn('[SwarmEngine] Failed to restore persisted swarm transfers:', err.message);
+    }
   }
 
   stop(): void {
@@ -70,7 +187,36 @@ export class SwarmEngine extends EventEmitter {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
+    if (this.announceTimer) {
+      clearInterval(this.announceTimer);
+      this.announceTimer = null;
+    }
+    trackerManager.stop();
     this.isInitialized = false;
+  }
+
+  public async announceAllActiveSwarms(event: 'started' | 'update' | 'stopped' = 'update'): Promise<void> {
+    const swarmsToAnnounce = Array.from(this.activeSwarms.entries()).filter(([_, t]) => t.state === 'seeding' || t.state === 'downloading');
+    if (swarmsToAnnounce.length === 0) {
+      debugLogManager.logDebug('SWARM', `Announce cycle triggered (${event}): No active seeding or downloading swarms.`);
+      return;
+    }
+
+    debugLogManager.logInfo('SWARM', `Starting announce cycle [event: ${event}] for ${swarmsToAnnounce.length} active swarm(s)...`, {
+      event,
+      swarms: swarmsToAnnounce.map(([hash, t]) => ({ hash: hash.slice(0, 16) + '...', title: t.title, state: t.state })),
+    });
+
+    for (const [infoHash, torrent] of swarmsToAnnounce) {
+      debugLogManager.logInfo('SWARM', `Dispatching announce for "${torrent.title}" (${infoHash.slice(0, 16)}...) to tracker mesh [event: ${event}, up: ${torrent.uploadedBytes}, down: ${torrent.downloadedBytes}]`);
+      await trackerManager.announceTorrent(infoHash, event, {
+        uploaded: torrent.uploadedBytes,
+        downloaded: torrent.downloadedBytes,
+        left: Math.max(0, torrent.totalBytes - torrent.downloadedBytes),
+      }).catch((err) => {
+        debugLogManager.logWarn('SWARM', `Tracker announce error for "${torrent.title}": ${err.message}`);
+      });
+    }
   }
 
   getActiveTorrents(): SwarmTorrentStatus[] {
@@ -162,6 +308,59 @@ export class SwarmEngine extends EventEmitter {
     };
 
     this.activeSwarms.set(infoHash, seedStatus);
+    discoveryEngine.indexLocalModel({
+      infoHash,
+      title: manifest.model?.title || 'Unknown Model',
+      version: manifest.model?.version || '1.0.0',
+      modelType: normalizeDiscoveryModelType(manifest.model?.modelType),
+      baseModel: manifest.model?.baseModel || 'SD 1.5',
+      totalSizeBytes: manifest.totalSizeBytes,
+      sha256: manifest.hashes?.sha256 || infoHash,
+      creator: manifest.model?.creator || 'Local Seeder',
+      creatorPublicKey: manifest.model?.creatorPublicKey,
+      signature: manifest.signature?.signature,
+      publishedAt: Date.now(),
+      tags: manifest.model?.tags || [manifest.model?.modelType || 'Model'],
+      description: manifest.model?.description || `Seeded model: ${manifest.model?.title || infoHash}`,
+      urlList: manifest.urlList || [],
+      nsfw: manifest.model?.nsfw || false,
+    });
+
+    // Save .swarm.json manifest sidecar file in model directory
+    try {
+      const ext = path.extname(modelFilePath);
+      const baseWithoutExt = modelFilePath.slice(0, -ext.length);
+      const swarmManifestFile = `${baseWithoutExt}.swarm.json`;
+      fs.writeFileSync(swarmManifestFile, JSON.stringify(manifest, null, 2), 'utf8');
+    } catch {}
+
+    // Persist to local SQLite transfers table
+    cmmDbBridge.saveSwarmTransfer({
+      infoHash,
+      manifestId: manifest.manifestId,
+      title: manifest.model.title,
+      modelType: manifest.model.modelType,
+      baseModel: manifest.model.baseModel,
+      state: 'seeding',
+      totalBytes: manifest.totalSizeBytes,
+      downloadedBytes: manifest.totalSizeBytes,
+      uploadedBytes: 0,
+      filePath: modelFilePath,
+      manifestJson: JSON.stringify(manifest),
+      cmmSynced: true,
+    }).catch(() => {});
+
+    debugLogManager.logInfo('SWARM', `Registered seeding swarm "${manifest.model.title}" (${infoHash.slice(0, 16)}...) -> ${modelFilePath}`);
+
+    // Broadcast started announce to tracker mesh
+    trackerManager.announceTorrent(infoHash, 'started', {
+      uploaded: 0,
+      downloaded: manifest.totalSizeBytes,
+      left: 0,
+    }).catch((err) => {
+      debugLogManager.logWarn('SWARM', `Initial tracker announce failed for "${manifest.model.title}": ${err.message}`);
+    });
+
     this.emit('torrent:added', seedStatus);
     return seedStatus;
   }
@@ -196,6 +395,23 @@ export class SwarmEngine extends EventEmitter {
       torrent.state = 'paused';
       torrent.downloadSpeedBps = 0;
       torrent.uploadSpeedBps = 0;
+      cmmDbBridge.saveSwarmTransfer({
+        infoHash: key,
+        title: torrent.title,
+        modelType: torrent.modelType,
+        baseModel: torrent.baseModel,
+        state: 'paused',
+        totalBytes: torrent.totalBytes,
+        downloadedBytes: torrent.downloadedBytes,
+        uploadedBytes: torrent.uploadedBytes,
+        filePath: torrent.savePath,
+        cmmSynced: torrent.cmmSynced,
+      }).catch(() => {});
+      trackerManager.announceTorrent(key, 'stopped', {
+        uploaded: torrent.uploadedBytes,
+        downloaded: torrent.downloadedBytes,
+        left: Math.max(0, torrent.totalBytes - torrent.downloadedBytes),
+      }).catch(() => {});
       this.emit('torrent:updated', torrent);
       return true;
     }
@@ -211,10 +427,39 @@ export class SwarmEngine extends EventEmitter {
         this.daemonRpc.resumeTorrent(daemonId).catch(() => {});
       }
       torrent.state = torrent.progressRatio >= 1 ? 'seeding' : 'downloading';
+      cmmDbBridge.saveSwarmTransfer({
+        infoHash: key,
+        title: torrent.title,
+        modelType: torrent.modelType,
+        baseModel: torrent.baseModel,
+        state: torrent.state,
+        totalBytes: torrent.totalBytes,
+        downloadedBytes: torrent.downloadedBytes,
+        uploadedBytes: torrent.uploadedBytes,
+        filePath: torrent.savePath,
+        cmmSynced: torrent.cmmSynced,
+      }).catch(() => {});
+      trackerManager.announceTorrent(key, 'started', {
+        uploaded: torrent.uploadedBytes,
+        downloaded: torrent.downloadedBytes,
+        left: Math.max(0, torrent.totalBytes - torrent.downloadedBytes),
+      }).catch(() => {});
       this.emit('torrent:updated', torrent);
       return true;
     }
     return false;
+  }
+
+  public async reannounceTorrent(infoHash: string): Promise<{ attempted: number; succeeded: number; peersDiscovered: Array<{ ip: string; port: number }> }> {
+    const key = infoHash.toLowerCase();
+    const torrent = this.activeSwarms.get(key);
+    debugLogManager.logInfo('SWARM', `Manual force re-announce requested for swarm ${key.slice(0, 16)}... ("${torrent?.title || 'Unknown'}")`);
+    const stats = torrent ? {
+      uploaded: torrent.uploadedBytes,
+      downloaded: torrent.downloadedBytes,
+      left: Math.max(0, torrent.totalBytes - torrent.downloadedBytes),
+    } : {};
+    return trackerManager.announceTorrent(key, 'update', stats);
   }
 
   removeTorrent(infoHash: string, deleteLocalData = false): boolean {
@@ -224,6 +469,9 @@ export class SwarmEngine extends EventEmitter {
       this.daemonRpc.removeTorrent(daemonId, deleteLocalData).catch(() => {});
       this.torrentIds.delete(key);
     }
+    trackerManager.announceTorrent(key, 'stopped', {}).catch(() => {});
+    this.manifests.delete(key);
+    cmmDbBridge.deleteSwarmTransfer(key).catch(() => {});
     const deleted = this.activeSwarms.delete(key);
     if (deleted) {
       this.emit('torrent:removed', key);

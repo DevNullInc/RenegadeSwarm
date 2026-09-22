@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import {
   DiscoveredModelEntry,
   DiscoveredModelWithTrust,
+  DiscoveryModelType,
   DiscoveryCatalogQuery,
   DiscoveryCatalogResponse,
   DiscoveryTrustLevel,
@@ -30,6 +31,9 @@ import {
 } from '../../protocol/discoveryTypes';
 import { KeyringManager, keyringManager } from './keyringManager';
 import { verifyEd25519Signature } from '../../protocol/crypto';
+import { debugLogManager } from '../telemetry/debugLogManager';
+import { trackerManager } from './trackerManager';
+import { swarmEngine } from './swarmEngine';
 
 export interface DiscoveryPeerConnection {
   peerId: string;
@@ -46,10 +50,28 @@ export interface DiscoveryEngineStats {
   totalQueriesProcessed: number;
 }
 
+export const MAX_DISCOVERED_CACHE_SIZE = 2000;
+export const MAX_MESSAGES_PER_SEC_PER_PEER = 20;
+
+export function normalizeDiscoveryModelType(rawType?: string): DiscoveryModelType {
+  if (!rawType) return 'CHECKPOINT';
+  const clean = rawType.toUpperCase().replace(/[\s\-_]/g, '');
+  if (clean === 'CHECKPOINT') return 'CHECKPOINT';
+  if (clean === 'LORA' || clean === 'LOCON') return 'LORA';
+  if (clean === 'GGUFLLM' || clean === 'LLM' || clean === 'GGUF') return 'GGUF_LLM';
+  if (clean === 'VAE') return 'VAE';
+  if (clean === 'TEXTENCODER') return 'TEXT_ENCODER';
+  if (clean === 'CONTROLNET') return 'CONTROLNET';
+  if (clean === 'DIFFUSIONMODEL' || clean === 'UNET') return 'DIFFUSION_MODEL';
+  if (clean === 'EMBEDDING' || clean === 'TEXTUALINVERSION') return 'EMBEDDING';
+  return 'OTHER';
+}
+
 export class DiscoveryEngine {
   private localCatalog: Map<string, DiscoveredModelEntry> = new Map(); // Key: infoHash
   private discoveredCache: Map<string, DiscoveredModelWithTrust> = new Map(); // Key: infoHash
   private discoveryPeers: Map<string, DiscoveryPeerConnection> = new Map(); // Key: peerId
+  private peerRateLimits: Map<string, { count: number; resetTime: number }> = new Map();
   private pendingQueries: Map<string, {
     resolve: (models: DiscoveredModelWithTrust[]) => void;
     results: Map<string, DiscoveredModelWithTrust>;
@@ -68,6 +90,32 @@ export class DiscoveryEngine {
   }
 
   // --- Local Catalog Management ---------------------------------------------
+
+  public syncActiveSwarms() {
+    try {
+      const activeTorrents = swarmEngine.getActiveTorrents();
+      for (const torrent of activeTorrents) {
+        const manifest = (swarmEngine as any).manifests?.get(torrent.infoHash.toLowerCase());
+        this.indexLocalModel({
+          infoHash: torrent.infoHash.toLowerCase(),
+          title: torrent.title,
+          version: manifest?.model?.version || '1.0.0',
+          modelType: normalizeDiscoveryModelType(torrent.modelType || manifest?.model?.modelType),
+          baseModel: torrent.baseModel || manifest?.model?.baseModel || 'SD 1.5',
+          totalSizeBytes: torrent.totalBytes,
+          sha256: manifest?.hashes?.sha256 || torrent.infoHash,
+          creator: manifest?.model?.creator || 'Local Seeder',
+          creatorPublicKey: manifest?.model?.creatorPublicKey,
+          signature: manifest?.signature?.signature,
+          publishedAt: Date.now(),
+          tags: manifest?.model?.tags || [torrent.modelType || 'Model'],
+          description: manifest?.model?.description || `Active swarm transfer: ${torrent.title}`,
+          urlList: manifest?.urlList || [],
+          nsfw: manifest?.model?.nsfw || false,
+        });
+      }
+    } catch {}
+  }
 
   public indexLocalModel(model: DiscoveredModelEntry) {
     this.localCatalog.set(model.infoHash.toLowerCase(), {
@@ -96,6 +144,7 @@ export class DiscoveryEngine {
 
   public unregisterDiscoveryPeer(peerId: string) {
     this.discoveryPeers.delete(peerId);
+    this.peerRateLimits.delete(peerId);
   }
 
   public getConnectedDiscoveryPeersCount(): number {
@@ -104,7 +153,28 @@ export class DiscoveryEngine {
 
   // --- Inbound Message Handling ---------------------------------------------
 
+  private checkPeerRateLimit(peerId: string): boolean {
+    const now = Date.now();
+    let rl = this.peerRateLimits.get(peerId);
+    if (!rl || now - rl.resetTime >= 1000) {
+      rl = { count: 1, resetTime: now };
+      this.peerRateLimits.set(peerId, rl);
+      return true;
+    }
+
+    if (rl.count >= MAX_MESSAGES_PER_SEC_PER_PEER) {
+      return false; // Rate limit exceeded
+    }
+
+    rl.count++;
+    return true;
+  }
+
   public handleInboundMessage(fromPeerId: string, type: string, payload: any) {
+    if (!this.checkPeerRateLimit(fromPeerId)) {
+      return; // Drop flood messages from this peer
+    }
+
     this.totalQueriesProcessed++;
 
     switch (type) {
@@ -178,6 +248,8 @@ export class DiscoveryEngine {
     timeoutMs?: number;
     limit?: number;
   } = {}): Promise<DiscoveredModelWithTrust[]> {
+    this.syncActiveSwarms();
+
     const queryId = randomUUID();
     const query: DiscoveryCatalogQuery = {
       queryId,
@@ -187,6 +259,13 @@ export class DiscoveryEngine {
       verifiedOnly: options.verifiedOnly ?? false,
       limit: options.limit ?? 50,
     };
+
+    debugLogManager.logInfo('DISCOVERY', `Initiating P2P model discovery search for "${queryText || '*'}"...`, {
+      query: queryText,
+      modelType: options.modelType || 'ALL',
+      baseModel: options.baseModel || 'ALL',
+      verifiedOnly: options.verifiedOnly ?? false,
+    });
 
     // 1. Gather local matches first
     const localMatches = this.queryCatalog(this.getLocalCatalog(), query).map(m => this.evaluateModelTrust(m, 'local'));
@@ -205,10 +284,21 @@ export class DiscoveryEngine {
       }
     }
 
-    // 3. If we have connected discovery peers, broadcast query and await responses
+    debugLogManager.logDebug('DISCOVERY', `Found ${localMatches.length} local and ${cachedMatches.length} cached match(es). Inspecting peer health across swarm mesh...`);
+
+    // 3. For any matched models, sync live peer counts from active swarms or trackers
+    for (const model of aggregated.values()) {
+      const activeTorrent = swarmEngine.getTorrent(model.infoHash);
+      if (activeTorrent) {
+        model.peerCount = Math.max(1, (activeTorrent.seedersConnected || 0) + (activeTorrent.peersConnected || 0));
+      }
+    }
+
+    // 4. If we have connected discovery peers, broadcast query and await responses
     const peers = Array.from(this.discoveryPeers.values());
     if (peers.length > 0) {
       const timeoutMs = options.timeoutMs ?? 1500; // 1.5s fast query timeout
+      debugLogManager.logInfo('DISCOVERY', `Broadcasting catalog_query to ${peers.length} connected BEP 10 discovery peer(s)...`);
 
       await new Promise<void>((resolve) => {
         const timeoutHandle = setTimeout(() => {
@@ -235,9 +325,16 @@ export class DiscoveryEngine {
       });
     }
 
-    // 4. Sort and return results: Verified first, then Community, then Untrusted
+    // 5. Sort and return results: Verified first, then Community, then Untrusted
     const resultList = Array.from(aggregated.values());
-    return this.rankDiscoveredModels(resultList, query.verifiedOnly);
+    const ranked = this.rankDiscoveredModels(resultList, query.verifiedOnly);
+
+    debugLogManager.logInfo('DISCOVERY', `Discovery search completed: ${ranked.length} model(s) found matching "${queryText || '*'}"`, {
+      totalFound: ranked.length,
+      sample: ranked.slice(0, 3).map(r => ({ title: r.title, trust: r.trustLevel, peers: r.peerCount })),
+    });
+
+    return ranked;
   }
 
   // --- Helpers & Evaluation -------------------------------------------------
@@ -304,23 +401,44 @@ export class DiscoveryEngine {
   }
 
   private cacheDiscoveredModel(model: DiscoveredModelWithTrust) {
+    if (!this.discoveredCache.has(model.infoHash) && this.discoveredCache.size >= MAX_DISCOVERED_CACHE_SIZE) {
+      // Find oldest entry to evict
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+      for (const [key, entry] of this.discoveredCache.entries()) {
+        if (entry.lastSeenAt < oldestTime) {
+          oldestTime = entry.lastSeenAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey) {
+        this.discoveredCache.delete(oldestKey);
+      }
+    }
     this.discoveredCache.set(model.infoHash, model);
   }
 
   private queryCatalog<T extends DiscoveredModelEntry>(catalog: T[], query: DiscoveryCatalogQuery): T[] {
-    const q = query.query.toLowerCase();
+    const q = (query.query || '').trim().toLowerCase();
 
     return catalog.filter((m) => {
-      if (query.modelType && m.modelType !== query.modelType) return false;
-      if (query.baseModel && query.baseModel !== 'All' && !m.baseModel.toLowerCase().includes(query.baseModel.toLowerCase())) return false;
+      if (query.modelType) {
+        const queryType = normalizeDiscoveryModelType(query.modelType);
+        const modelType = normalizeDiscoveryModelType(m.modelType);
+        if (queryType !== modelType) return false;
+      }
+
+      if (query.baseModel && query.baseModel !== 'All' && !(m.baseModel || '').toLowerCase().includes(query.baseModel.toLowerCase())) {
+        return false;
+      }
 
       if (q) {
-        const matchTitle = m.title.toLowerCase().includes(q);
-        const matchCreator = m.creator.toLowerCase().includes(q);
-        const matchTags = m.tags.some(t => t.toLowerCase().includes(q));
-        const matchDesc = m.description.toLowerCase().includes(q);
-        const matchBase = m.baseModel.toLowerCase().includes(q);
-        const matchHash = m.infoHash.toLowerCase().includes(q) || (m.sha256 && m.sha256.toLowerCase().includes(q));
+        const matchTitle = (m.title || '').toLowerCase().includes(q);
+        const matchCreator = (m.creator || '').toLowerCase().includes(q);
+        const matchTags = Array.isArray(m.tags) && m.tags.some(t => String(t).toLowerCase().includes(q));
+        const matchDesc = (m.description || '').toLowerCase().includes(q);
+        const matchBase = (m.baseModel || '').toLowerCase().includes(q);
+        const matchHash = (m.infoHash || '').toLowerCase().includes(q) || (m.sha256 && m.sha256.toLowerCase().includes(q));
 
         if (!matchTitle && !matchCreator && !matchTags && !matchDesc && !matchBase && !matchHash) {
           return false;

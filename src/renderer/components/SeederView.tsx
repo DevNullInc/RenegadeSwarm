@@ -38,10 +38,12 @@ import {
 import { CreateSwarmPackageRequest, PackageJobProgress } from '../../shared/ipcContracts';
 import { SwarmManifest } from '../../protocol/types';
 import { CmmLocalModelRow } from '../../main/cmm/cmmDbBridge';
+import { TabDebugDrawer } from './TabDebugDrawer';
 
 interface SeederViewProps {
   onCreatePackage: (req: CreateSwarmPackageRequest) => Promise<SwarmManifest>;
   initialModel?: CmmLocalModelRow | null;
+  devMode?: boolean;
 }
 
 interface VerifiedModelDetails {
@@ -57,7 +59,7 @@ interface VerifiedModelDetails {
   previewFilePath: string;
 }
 
-export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initialModel }) => {
+export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initialModel, devMode = false }) => {
   const [modelFilePath, setModelFilePath] = useState('');
   const [modelFileName, setModelFileName] = useState('');
   const [modelFileSize, setModelFileSize] = useState<number | null>(null);
@@ -1063,6 +1065,9 @@ export const SeederView: React.FC<SeederViewProps> = ({ onCreatePackage, initial
           </div>
         </form>
       )}
+
+      {/* In-Tab Debug & Telemetry Drawer */}
+      <TabDebugDrawer tabId="seeder" devMode={devMode} tabLabel="Packaging & SHA-256 Hashing Telemetry" />
     </div>
   );
 };

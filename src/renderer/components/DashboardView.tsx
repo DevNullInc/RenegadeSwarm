@@ -34,9 +34,13 @@ import {
   FileCheck,
   RefreshCw,
   Lock,
+  Magnet,
+  Check,
+  Radio,
 } from 'lucide-react';
 import { SwarmTorrentStatus } from '../../protocol/types';
 import { ModelFolderEntry, PreDownloadVerificationResult } from '../../shared/ipcContracts';
+import { TabDebugDrawer } from './TabDebugDrawer';
 
 interface DashboardViewProps {
   torrents: SwarmTorrentStatus[];
@@ -44,6 +48,7 @@ interface DashboardViewProps {
   onPause: (infoHash: string) => void;
   onResume: (infoHash: string) => void;
   onRemove: (infoHash: string) => void;
+  devMode?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -52,16 +57,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onPause,
   onResume,
   onRemove,
+  devMode = false,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [magnetInput, setMagnetInput] = useState('');
   const [filter, setFilter] = useState<'all' | 'downloading' | 'seeding'>('all');
   const [availableFolders, setAvailableFolders] = useState<ModelFolderEntry[]>([]);
   const [selectedDestination, setSelectedDestination] = useState<string>('');
+  const [copiedHash, setCopiedHash] = useState<string | null>(null);
+  const [reannouncingHash, setReannouncingHash] = useState<string | null>(null);
+  const [reannouncedHash, setReannouncedHash] = useState<string | null>(null);
 
   // Pre-download verification state
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState<PreDownloadVerificationResult | null>(null);
+
+  const handleForceReannounce = async (t: SwarmTorrentStatus) => {
+    if (reannouncingHash) return;
+    setReannouncingHash(t.infoHash);
+    try {
+      if (window.renegadeSwarm?.reannounceTorrent) {
+        await window.renegadeSwarm.reannounceTorrent({ infoHash: t.infoHash });
+        setReannouncedHash(t.infoHash);
+        setTimeout(() => setReannouncedHash(null), 2500);
+      }
+    } catch (err) {
+      console.error('Failed to force re-announce:', err);
+    } finally {
+      setReannouncingHash(null);
+    }
+  };
 
   const loadFolders = async () => {
     if (window.renegadeSwarm?.getModelFolders) {
@@ -154,6 +179,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const buildMagnetUri = (t: SwarmTorrentStatus): string => {
+    const dn = encodeURIComponent(t.title || 'Model');
+    let uri = `magnet:?xt=urn:btih:${t.infoHash}&dn=${dn}`;
+    if (t.totalBytes) {
+      uri += `&xl=${t.totalBytes}`;
+    }
+    const trackers = [
+      'udp://tracker.opentrackr.org:1337/announce',
+      'udp://open.stealth.si:80/announce',
+      'udp://tracker.torrent.eu.org:451/announce',
+      'wss://tracker.webtorrent.dev',
+    ];
+    for (const tr of trackers) {
+      uri += `&tr=${encodeURIComponent(tr)}`;
+    }
+    return uri;
+  };
+
+  const handleCopyMagnet = (t: SwarmTorrentStatus) => {
+    const uri = buildMagnetUri(t);
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(uri);
+    }
+    setCopiedHash(t.infoHash);
+    setTimeout(() => {
+      setCopiedHash((curr) => (curr === t.infoHash ? null : curr));
+    }, 2500);
   };
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -265,7 +319,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <th style={{ padding: '10px 14px', width: '110px' }}>Peers</th>
                   <th style={{ padding: '10px 14px', width: '80px' }}>Ratio</th>
                   <th style={{ padding: '10px 14px', width: '100px' }}>CMM Status</th>
-                  <th style={{ padding: '10px 14px', width: '130px', textAlign: 'right' }}>Actions</th>
+                  <th style={{ padding: '10px 14px', width: '160px', textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -325,6 +379,45 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </td>
                     <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyMagnet(t)}
+                          className="btn-secondary"
+                          style={{
+                            padding: '6px 8px',
+                            color: copiedHash === t.infoHash ? '#10b981' : undefined,
+                            borderColor: copiedHash === t.infoHash ? 'rgba(16, 185, 129, 0.4)' : undefined,
+                            background: copiedHash === t.infoHash ? 'rgba(16, 185, 129, 0.12)' : undefined,
+                          }}
+                          title={copiedHash === t.infoHash ? 'Magnet Link Copied!' : 'Copy Magnet Link'}
+                        >
+                          {copiedHash === t.infoHash ? <Check size={14} /> : <Magnet size={14} />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleForceReannounce(t)}
+                          disabled={reannouncingHash === t.infoHash}
+                          className="btn-secondary"
+                          style={{
+                            padding: '6px 8px',
+                            color: reannouncedHash === t.infoHash ? '#06b6d4' : undefined,
+                            borderColor: reannouncedHash === t.infoHash ? 'rgba(6, 182, 212, 0.4)' : undefined,
+                            background: reannouncedHash === t.infoHash ? 'rgba(6, 182, 212, 0.12)' : undefined,
+                          }}
+                          title={
+                            reannouncingHash === t.infoHash
+                              ? 'Broadcasting announce to tracker mesh...'
+                              : reannouncedHash === t.infoHash
+                              ? 'Re-announce Broadcasted!'
+                              : 'Force Re-Announce to Trackers'
+                          }
+                        >
+                          <Radio
+                            size={14}
+                            className={reannouncingHash === t.infoHash ? 'spin' : ''}
+                            color={reannouncedHash === t.infoHash ? '#06b6d4' : undefined}
+                          />
+                        </button>
                         {t.state === 'downloading' || t.state === 'seeding' ? (
                           <button
                             onClick={() => onPause(t.infoHash)}
@@ -580,6 +673,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* In-Tab Debug & Telemetry Drawer */}
+      <TabDebugDrawer tabId="dashboard" devMode={devMode} tabLabel="Swarm Monitor & Trackers" />
     </div>
   );
 };

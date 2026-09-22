@@ -20,12 +20,14 @@ import React, { useState, useEffect } from 'react';
 import { Save, Check, ShieldCheck, Lock, EyeOff } from 'lucide-react';
 import { BandwidthSettings } from '../../shared/ipcContracts';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../../protocol/sharingPolicy';
+import { TabDebugDrawer } from './TabDebugDrawer';
 
 interface BandwidthViewProps {
   settings: BandwidthSettings;
   sharingPolicy?: SharingPolicySettings;
   onUpdateSettings: (settings: Partial<BandwidthSettings>) => Promise<void>;
   onUpdateSharingPolicy?: (policy: Partial<SharingPolicySettings>) => Promise<void>;
+  devMode?: boolean;
 }
 
 export const BandwidthView: React.FC<BandwidthViewProps> = ({
@@ -33,6 +35,7 @@ export const BandwidthView: React.FC<BandwidthViewProps> = ({
   sharingPolicy = DEFAULT_SHARING_POLICY,
   onUpdateSettings,
   onUpdateSharingPolicy,
+  devMode = false,
 }) => {
   const [formState, setFormState] = useState<BandwidthSettings>(settings);
   const [policyState, setPolicyState] = useState<SharingPolicySettings>(sharingPolicy);
@@ -275,6 +278,9 @@ export const BandwidthView: React.FC<BandwidthViewProps> = ({
             </button>
           </div>
         </form>
+
+      {/* In-Tab Debug & Telemetry Drawer */}
+      <TabDebugDrawer tabId="bandwidth" devMode={devMode} tabLabel="Token Bucket Rate Limiting & Sockets" />
     </div>
   );
 };

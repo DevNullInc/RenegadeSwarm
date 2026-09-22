@@ -17,6 +17,7 @@
  */
 
 import crypto from 'crypto';
+import net from 'net';
 
 export interface DhtSecurityConfig {
   maxQueriesPerSecond: number; // Max queries allowed per second
@@ -24,9 +25,102 @@ export interface DhtSecurityConfig {
   enforceBep42: boolean;
 }
 
+/**
+ * Computes standard 32-bit Castagnoli CRC32C for BEP 42 IP validation.
+ */
+export function crc32c(data: Buffer): number {
+  const POLY = 0x82f63b78; // Castagnoli reversed polynomial
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ ((crc & 1) ? POLY : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * Converts IPv4 or IPv6 address string into BEP 42 masked IP buffer.
+ */
+export function ipToBuffer(ip: string, r: number = 0): Buffer | null {
+  const cleanIp = ip.trim();
+  const ipType = net.isIP(cleanIp);
+
+  if (ipType === 4) {
+    const ipBytes = cleanIp.split('.').map(Number);
+    if (ipBytes.length !== 4) return null;
+
+    const mask = [0x03, 0x0f, 0x3f, 0xff];
+    return Buffer.from([
+      (ipBytes[0] & mask[0]) | ((r & 0x07) << 5),
+      ipBytes[1] & mask[1],
+      ipBytes[2] & mask[2],
+      ipBytes[3] & mask[3],
+    ]);
+  } else if (ipType === 6) {
+    // Parse IPv6 hex groups
+    try {
+      const parts = cleanIp.split(':');
+      let expanded: number[] = [];
+      let doubleColonIndex = parts.indexOf('');
+
+      if (doubleColonIndex !== -1) {
+        const head = parts.slice(0, doubleColonIndex).filter(Boolean);
+        const tail = parts.slice(doubleColonIndex + 1).filter(Boolean);
+        const missing = 8 - (head.length + tail.length);
+        const zeros = new Array(missing).fill('0');
+        expanded = [...head, ...zeros, ...tail].map((h) => parseInt(h || '0', 16));
+      } else {
+        expanded = parts.map((h) => parseInt(h, 16));
+      }
+
+      const raw16 = Buffer.alloc(16);
+      for (let i = 0; i < 8; i++) {
+        raw16.writeUInt16BE(expanded[i] || 0, i * 2);
+      }
+
+      // BEP 42 IPv6 mask uses first 8 bytes
+      const maskV6 = [0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff];
+      const masked = Buffer.alloc(8);
+      masked[0] = (raw16[0] & maskV6[0]) | ((r & 0x07) << 5);
+      for (let i = 1; i < 8; i++) {
+        masked[i] = raw16[i] & maskV6[i];
+      }
+      return masked;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * BEP 42: Validates whether a remote DHT Node ID complies with IP-derived security hash (Castagnoli CRC32C).
+ */
+export function verifyBEP42NodeId(nodeId: Buffer | string, ip: string, r: number = 0): boolean {
+  try {
+    const nodeBuf = typeof nodeId === 'string' ? Buffer.from(nodeId, 'hex') : nodeId;
+    if (nodeBuf.length !== 20) return false;
+
+    const maskedIp = ipToBuffer(ip, r);
+    if (!maskedIp) return false;
+
+    const crc = crc32c(maskedIp);
+    const expectedPrefix = (crc >>> 27) & 0x1f; // Top 5 bits
+    const actualPrefix = nodeBuf[0] >>> 3; // Top 5 bits of first byte
+
+    return actualPrefix === expectedPrefix;
+  } catch {
+    return false;
+  }
+}
+
 export class DhtHardeningManager {
   private allowedInfoHashes: Set<string> = new Set();
   private queryCounter: number = 0;
+  private bytesThisSecond: number = 0;
   private lastResetTime: number = Date.now();
   private config: DhtSecurityConfig;
 
@@ -55,20 +149,47 @@ export class DhtHardeningManager {
   }
 
   /**
-   * Rule 14: Rate limits incoming/outgoing DHT queries to keep background bandwidth < 5KB/s.
+   * Rule 14: Rate limits incoming/outgoing DHT queries and enforces < 5KB/s maintenance bandwidth.
    */
-  checkQueryRateLimit(): boolean {
+  checkQueryRateLimit(estimatedPacketBytes: number = 200): boolean {
     const now = Date.now();
     if (now - this.lastResetTime >= 1000) {
       this.queryCounter = 0;
+      this.bytesThisSecond = 0;
       this.lastResetTime = now;
     }
 
     if (this.queryCounter >= this.config.maxQueriesPerSecond) {
-      return false; // Rate limit exceeded
+      return false; // Query rate limit exceeded
+    }
+
+    const maxBytes = this.config.maxBackgroundBandwidthKbps * 1024;
+    if (this.bytesThisSecond + estimatedPacketBytes > maxBytes) {
+      return false; // Background bandwidth limit exceeded (<5KB/s)
     }
 
     this.queryCounter++;
+    this.bytesThisSecond += estimatedPacketBytes;
+    return true;
+  }
+
+  /**
+   * Enforces specific byte bandwidth limit against configured budget.
+   */
+  checkBandwidthLimit(bytes: number): boolean {
+    const now = Date.now();
+    if (now - this.lastResetTime >= 1000) {
+      this.queryCounter = 0;
+      this.bytesThisSecond = 0;
+      this.lastResetTime = now;
+    }
+
+    const maxBytes = this.config.maxBackgroundBandwidthKbps * 1024;
+    if (this.bytesThisSecond + bytes > maxBytes) {
+      return false;
+    }
+
+    this.bytesThisSecond += bytes;
     return true;
   }
 
@@ -77,53 +198,26 @@ export class DhtHardeningManager {
    */
   verifyBep42NodeId(ip: string, nodeIdHex: string, r: number = 0): boolean {
     if (!this.config.enforceBep42) return true;
-    if (nodeIdHex.length !== 40) return false;
-
-    try {
-      // BEP 42 IP-based CRC32/SHA-1 generation verification
-      const ipBytes = ip.split('.').map(Number);
-      if (ipBytes.length !== 4) return false;
-
-      const mask = [0x03, 0x0f, 0x3f, 0xff];
-      const maskedIp = Buffer.from([
-        (ipBytes[0] & mask[0]) | (r << 5),
-        ipBytes[1] & mask[1],
-        ipBytes[2] & mask[2],
-        ipBytes[3] & mask[3],
-      ]);
-
-      const expectedLeadingBytes = crypto.createHash('sha1').update(maskedIp).digest().slice(0, 3);
-      const actualLeadingBytes = Buffer.from(nodeIdHex.slice(0, 6), 'hex');
-
-      // The top 21 bits of the node ID must match
-      return (
-        (expectedLeadingBytes[0] === actualLeadingBytes[0]) &&
-        (expectedLeadingBytes[1] === actualLeadingBytes[1]) &&
-        ((expectedLeadingBytes[2] & 0xf8) === (actualLeadingBytes[2] & 0xf8))
-      );
-    } catch {
-      return false;
-    }
+    return verifyBEP42NodeId(nodeIdHex, ip, r);
   }
 
   /**
-   * Generates a BEP 42 compliant Node ID for the local client.
+   * Generates a BEP 42 compliant Node ID for the local client using Castagnoli CRC32C.
    */
   generateLocalBep42NodeId(ip: string, r: number = 0): string {
-    const ipBytes = ip.split('.').map(Number);
-    const mask = [0x03, 0x0f, 0x3f, 0xff];
-    const maskedIp = Buffer.from([
-      (ipBytes[0] & mask[0]) | (r << 5),
-      ipBytes[1] & mask[1],
-      ipBytes[2] & mask[2],
-      ipBytes[3] & mask[3],
-    ]);
+    const maskedIp = ipToBuffer(ip, r);
+    if (!maskedIp) {
+      return crypto.randomBytes(20).toString('hex');
+    }
 
-    const sha1 = crypto.createHash('sha1').update(maskedIp).digest();
-    const randomSuffix = crypto.randomBytes(17);
+    const crc = crc32c(maskedIp);
+    const top5Bits = (crc >>> 27) & 0x1f;
 
-    const nodeId = Buffer.concat([sha1.slice(0, 3), randomSuffix]);
-    return nodeId.toString('hex');
+    const randomBytes = crypto.randomBytes(20);
+    // Set top 5 bits of first byte to match CRC32C prefix
+    randomBytes[0] = (top5Bits << 3) | (randomBytes[0] & 0x07);
+
+    return randomBytes.toString('hex');
   }
 }
 

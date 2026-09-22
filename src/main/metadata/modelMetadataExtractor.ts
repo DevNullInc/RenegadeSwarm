@@ -574,7 +574,7 @@ export class ModelMetadataExtractor {
 
           // Auto-pull preview image only if SFW (or allowed) and no local sibling preview exists
           if (civitaiInfo.previewImageUrl && !previewFilePath) {
-            const cachedPreview = await this.downloadAndCachePreview(civitaiInfo.previewImageUrl, sha256);
+            const cachedPreview = await this.downloadAndCachePreview(civitaiInfo.previewImageUrl, sha256 || '', resolvedPath);
             if (cachedPreview) {
               previewFilePath = cachedPreview;
             }
@@ -937,25 +937,45 @@ export class ModelMetadataExtractor {
   }
 
   /**
-   * Downloads and caches remote preview image to local storage.
+   * Downloads and caches remote preview image directly in the model's directory alongside the model.
    */
-  async downloadAndCachePreview(imageUrl: string, hash: string): Promise<string | undefined> {
+  async downloadAndCachePreview(
+    imageUrl: string,
+    hash: string,
+    modelFilePath?: string
+  ): Promise<string | undefined> {
     try {
       if (!imageUrl || typeof imageUrl !== 'string') return undefined;
       const parsedUrl = new URL(imageUrl);
       if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') return undefined;
 
-      const cleanHash = (hash || '').replace(/[^a-fA-F0-9]/g, '').slice(0, 32);
-      if (!cleanHash || cleanHash.length < 8) return undefined;
+      if (!modelFilePath) return undefined;
+      const resolvedModelPath = path.resolve(modelFilePath);
+      const modelDir = path.dirname(resolvedModelPath);
+      if (!fs.existsSync(modelDir)) return undefined;
 
-      const previewDir = path.join(os.homedir(), '.renegadeswarm', 'previews');
-      if (!fs.existsSync(previewDir)) {
-        fs.mkdirSync(previewDir, { recursive: true });
+      const ext = path.extname(resolvedModelPath);
+      const baseWithoutExt = resolvedModelPath.slice(0, -ext.length);
+
+      // Determine file extension from URL or default to .png
+      const pathname = parsedUrl.pathname.toLowerCase();
+      let imgExt = '.png';
+      if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
+        imgExt = '.jpg';
+      } else if (pathname.endsWith('.webp')) {
+        imgExt = '.webp';
+      } else if (pathname.endsWith('.png')) {
+        imgExt = '.png';
       }
 
-      const localPath = path.join(previewDir, `${cleanHash.slice(0, 16)}.jpg`);
+      const localPath = `${baseWithoutExt}${imgExt}`;
       if (fs.existsSync(localPath) && fs.statSync(localPath).size > 200) {
         return localPath;
+      }
+
+      const previewCandidate = `${baseWithoutExt}.preview${imgExt}`;
+      if (fs.existsSync(previewCandidate) && fs.statSync(previewCandidate).size > 200) {
+        return previewCandidate;
       }
 
       const controller = new AbortController();

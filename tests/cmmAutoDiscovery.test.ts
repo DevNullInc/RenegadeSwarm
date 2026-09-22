@@ -137,4 +137,19 @@ describe('RenegadeCMM Periodic Auto-Discovery & Health Check', () => {
     expect(status.connected).toBe(true);
     expect(status.modelCount).toBe(3);
   });
+
+  it('should compute persistent database paths matching standard OS specifications', async () => {
+    const { getDefaultPersistentCmmDbPath } = await import('../src/main/cmm/cmmDbBridge');
+    const persistentPath = getDefaultPersistentCmmDbPath();
+    expect(persistentPath).toContain('renegadecmm.sqlite');
+
+    if (process.platform === 'win32') {
+      expect(persistentPath).toContain('RenegadeCMM');
+      expect(persistentPath).toMatch(/[A-Za-z]:\\.*AppData\\Roaming\\RenegadeCMM\\renegadecmm\.sqlite/i);
+    } else if (process.platform === 'darwin') {
+      expect(persistentPath).toContain('Library/Application Support/RenegadeCMM/renegadecmm.sqlite');
+    } else {
+      expect(persistentPath).toContain('RenegadeCMM/renegadecmm.sqlite');
+    }
+  });
 });

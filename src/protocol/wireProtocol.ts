@@ -55,15 +55,20 @@ export interface PieceBlockPayload {
 
 /**
  * Serializes standard 68-byte BitTorrent Handshake buffer.
+ * - Reserved byte 5 (index 25) 0x10: BEP 10 Extension Protocol
+ * - Reserved byte 7 (index 27) 0x01: BEP 5 Mainline DHT Support
  */
-export function serializeHandshake(infoHashHex: string, peerIdHex: string, extensions = true): Buffer {
+export function serializeHandshake(infoHashHex: string, peerIdHex: string, extensions = true, dht = true): Buffer {
   const buf = Buffer.alloc(68);
   buf.writeUInt8(19, 0); // pstrlen
   buf.write(PROTOCOL_STRING, 1, 19, 'utf8');
 
-  // Reserved 8 bytes (Enable BEP 10 Extension Protocol bit 43: 0x10 at byte index 25)
+  // Reserved 8 bytes (indices 20 to 27)
   if (extensions) {
-    buf[25] = 0x10;
+    buf[25] = 0x10; // BEP 10 Extension Protocol
+  }
+  if (dht) {
+    buf[27] = 0x01; // BEP 5 Mainline DHT Support
   }
 
   Buffer.from(infoHashHex, 'hex').copy(buf, 28, 0, 20);
@@ -202,6 +207,26 @@ export class Bitfield {
 export const EXTENDED_HANDSHAKE_ID = 0;
 export const RS_DISCOVERY_EXTENSION_ID = 1;
 
+export const MAX_EXTENDED_HANDSHAKE_SIZE = 64 * 1024; // 64KB max
+export const MAX_DISCOVERY_PAYLOAD_SIZE = 512 * 1024; // 512KB max
+
+/**
+ * Safe JSON parser guarding against prototype pollution (CWE-1321)
+ */
+export function safeJsonParse<T = any>(str: string): T | null {
+  try {
+    const parsed = JSON.parse(str, (key, value) => {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        return undefined;
+      }
+      return value;
+    });
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export interface ExtendedHandshakeDict {
   m: Record<string, number>; // Map of extension name to local extension ID
   v?: string;                // Client name/version (e.g. 'RenegadeSwarm/0.3.0')
@@ -234,14 +259,17 @@ export function serializeExtendedHandshake(dict: ExtendedHandshakeDict): Buffer 
 }
 
 /**
- * Parses BEP 10 Extended Handshake JSON buffer.
+ * Parses BEP 10 Extended Handshake JSON buffer with size and prototype pollution protection.
  */
 export function parseExtendedHandshake(data: Buffer): ExtendedHandshakeDict | null {
+  if (!data || data.length > MAX_EXTENDED_HANDSHAKE_SIZE) {
+    return null;
+  }
   try {
     const jsonStr = data.toString('utf8');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = safeJsonParse<ExtendedHandshakeDict>(jsonStr);
     if (typeof parsed === 'object' && parsed !== null && typeof parsed.m === 'object') {
-      return parsed as ExtendedHandshakeDict;
+      return parsed;
     }
     return null;
   } catch {
@@ -268,14 +296,17 @@ export function serializeDiscoveryPayload(type: 'catalog_query' | 'catalog_respo
 }
 
 /**
- * Parses a RenegadeSwarm discovery message payload.
+ * Parses a RenegadeSwarm discovery message payload with size and prototype pollution protection.
  */
 export function parseDiscoveryPayload(data: Buffer): DiscoveryEnvelope | null {
+  if (!data || data.length > MAX_DISCOVERY_PAYLOAD_SIZE) {
+    return null;
+  }
   try {
     const jsonStr = data.toString('utf8');
-    const parsed = JSON.parse(jsonStr);
+    const parsed = safeJsonParse<DiscoveryEnvelope>(jsonStr);
     if (parsed && typeof parsed.type === 'string' && parsed.payload) {
-      return parsed as DiscoveryEnvelope;
+      return parsed;
     }
     return null;
   } catch {

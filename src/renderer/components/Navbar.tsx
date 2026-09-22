@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Activity,
   Compass,
@@ -28,9 +28,11 @@ import {
   KeyRound,
   DownloadCloud,
   ExternalLink,
+  Info,
+  Bug,
 } from 'lucide-react';
 
-export type TabId = 'dashboard' | 'discovery' | 'seeder' | 'cmm' | 'bandwidth' | 'settings';
+export type TabId = 'dashboard' | 'discovery' | 'seeder' | 'cmm' | 'bandwidth' | 'settings' | 'about';
 
 interface NavbarProps {
   activeTab: TabId;
@@ -44,6 +46,8 @@ interface NavbarProps {
   isCheckingCmm?: boolean;
   cmmProbeBudget?: number;
   onRetryCmm?: () => void;
+  devMode?: boolean;
+  onToggleDevMode?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -58,7 +62,34 @@ export const Navbar: React.FC<NavbarProps> = ({
   isCheckingCmm = false,
   cmmProbeBudget = 5,
   onRetryCmm,
+  devMode = false,
+  onToggleDevMode,
 }) => {
+  const [clickCount, setClickCount] = useState(0);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const resetTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleBrandClick = () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    const newCount = clickCount + 1;
+    setClickCount(newCount);
+
+    if (newCount >= 5 && newCount < 10) {
+      setToastMessage(`🛠️ You are now ${10 - newCount} steps away from Developer Mode!`);
+    } else if (newCount >= 10) {
+      if (onToggleDevMode) {
+        onToggleDevMode();
+      }
+      setToastMessage(!devMode ? '🚀 Developer / Debug Mode Enabled! Diagnostics unlocked.' : '🔒 Developer Mode Disabled.');
+      setClickCount(0);
+    }
+
+    resetTimerRef.current = setTimeout(() => {
+      setClickCount(0);
+      setToastMessage(null);
+    }, 2500);
+  };
+
   const tabs = [
     { id: 'dashboard' as TabId, label: 'Swarm Monitor', icon: Activity },
     { id: 'discovery' as TabId, label: 'P2P Discovery', icon: Compass },
@@ -66,6 +97,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'cmm' as TabId, label: 'RenegadeCMM Bridge', icon: Database },
     { id: 'bandwidth' as TabId, label: 'Network & Quotas', icon: Sliders },
     { id: 'settings' as TabId, label: 'Keyring & Settings', icon: KeyRound },
+    { id: 'about' as TabId, label: 'About', icon: Info },
   ];
 
   const handleInstallClick = (e: React.MouseEvent) => {
@@ -84,26 +116,84 @@ export const Navbar: React.FC<NavbarProps> = ({
       justifyContent: 'space-between',
       padding: '12px 24px',
       borderBottom: '1px solid var(--border-subtle)',
-      background: '#0d1117'
+      background: '#0d1117',
+      position: 'relative',
     }}>
-      {/* Brand */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      {/* Dev Mode Activation Toast Notification */}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '56px',
+            left: '24px',
+            zIndex: 1000,
+            padding: '8px 14px',
+            borderRadius: '8px',
+            background: 'linear-gradient(135deg, #1e1b4b, #312e81)',
+            border: '1px solid #a855f7',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.6)',
+            color: '#fff',
+            fontSize: '12px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Brand with 10-Click Easter Egg */}
+      <div
+        onClick={handleBrandClick}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+        title="RenegadeSwarm - Click 10 times to unlock Developer & Diagnostic Mode"
+      >
         <div style={{
           width: '32px',
           height: '32px',
           borderRadius: '8px',
-          background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+          background: devMode
+            ? 'linear-gradient(135deg, #ec4899 0%, #a855f7 100%)'
+            : 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 0 12px rgba(168, 85, 247, 0.4)',
+          boxShadow: devMode ? '0 0 16px rgba(236, 72, 153, 0.6)' : '0 0 12px rgba(168, 85, 247, 0.4)',
+          transition: 'all 0.3s ease',
         }}>
-          <Radio size={18} color="#fff" />
+          {devMode ? <Bug size={18} color="#fff" /> : <Radio size={18} color="#fff" />}
         </div>
         <div>
-          <h1 style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px', margin: 0, color: '#fff' }}>
-            Renegade<span style={{ color: 'var(--accent-purple)' }}>Swarm</span>
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <h1 style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px', margin: 0, color: '#fff' }}>
+              Renegade<span style={{ color: 'var(--accent-purple)' }}>Swarm</span>
+            </h1>
+            {devMode && (
+              <span
+                className="badge mono"
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  background: 'rgba(236, 72, 153, 0.2)',
+                  color: '#f472b6',
+                  border: '1px solid rgba(236, 72, 153, 0.4)',
+                  padding: '1px 5px',
+                  boxShadow: '0 0 8px rgba(236, 72, 153, 0.3)',
+                }}
+              >
+                DEV MODE
+              </span>
+            )}
+          </div>
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>
             P2P AI Model Distribution Network
           </span>
@@ -115,6 +205,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const isAboutTab = tab.id === 'about';
           return (
             <button
               key={tab.id}
@@ -126,13 +217,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 padding: '8px 14px',
                 borderRadius: '8px',
                 border: 'none',
-                background: isActive ? 'rgba(147, 51, 234, 0.15)' : 'transparent',
+                background: isActive
+                  ? isAboutTab
+                    ? 'linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(99, 102, 241, 0.25))'
+                    : 'rgba(147, 51, 234, 0.15)'
+                  : 'transparent',
                 color: isActive ? '#c084fc' : 'var(--text-secondary)',
                 fontWeight: isActive ? 600 : 500,
                 fontSize: '13px',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
                 outline: 'none',
+                boxShadow: isActive && isAboutTab ? '0 0 12px rgba(168, 85, 247, 0.3)' : 'none',
               }}
             >
               <Icon size={16} />

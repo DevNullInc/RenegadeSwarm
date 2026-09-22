@@ -35,6 +35,7 @@ import {
   buildSwarmManifest,
 } from './manifestBuilder';
 import { swarmEngine } from './swarmEngine';
+import { debugLogManager } from '../telemetry/debugLogManager';
 
 export class PackageJobManager extends EventEmitter {
   private currentJob: PackageJobProgress | null = null;
@@ -155,6 +156,8 @@ export class PackageJobManager extends EventEmitter {
       createdAt: Date.now(),
     };
 
+    debugLogManager.logInfo('SEEDER', `Starting packaging job for "${path.basename(req.modelFilePath)}" (${(totalExpectedBytes / (1024 * 1024)).toFixed(1)} MB) [${req.modelType}, base: ${req.baseModel || 'SD 1.5'}]`);
+
     this.emitProgress();
 
     // Run async background packaging loop
@@ -212,6 +215,8 @@ export class PackageJobManager extends EventEmitter {
       },
       signal
     );
+
+    debugLogManager.logInfo('SEEDER', `Computed SHA-256 hash for "${path.basename(req.modelFilePath)}": ${modelSha256.slice(0, 16)}...`);
 
     let previewSha256: string | undefined;
     if (req.previewFilePath && fs.existsSync(req.previewFilePath)) {
@@ -275,6 +280,8 @@ export class PackageJobManager extends EventEmitter {
       abortSignal: signal,
     });
 
+    debugLogManager.logInfo('MANIFEST', `Built signed swarm manifest for "${manifest.model.title}" (infoHash: ${manifest.hashes.infoHash.slice(0, 16)}...)`);
+
     if (signal.aborted) throw new Error('Operation aborted');
 
     // 4. Seeding Phase
@@ -293,6 +300,8 @@ export class PackageJobManager extends EventEmitter {
       manifest,
       completedAt: Date.now(),
     });
+
+    debugLogManager.logInfo('SEEDER', `Packaging pipeline completed successfully for "${manifest.model.title}".`);
 
     this.abortController = null;
   }

@@ -127,8 +127,116 @@ input, select, textarea {
   border-radius: 8px;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 input:focus, select:focus, textarea:focus {
-  border-color: var(--accent-purple);
+  border-color: var(--accent-cyan);
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
 }
+
+.btn-cyan {
+  background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+  color: #000;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-cyan:hover {
+  background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.35);
+}
+
+.filter-chip {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.filter-chip-active {
+  background: rgba(6, 182, 212, 0.18);
+  color: #22d3ee;
+  border-color: rgba(6, 182, 212, 0.45);
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.15);
+}
+
+.model-card {
+  background: linear-gradient(180deg, rgba(18, 22, 31, 0.85) 0%, rgba(12, 15, 22, 0.95) 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: all 0.2s ease;
+}
+.model-card:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 16px rgba(6, 182, 212, 0.12);
+}
+
+.sortable-th {
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.sortable-th:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.animate-spin, .spin {
+  animation: rs-spin 1s linear infinite;
+}
+
+@keyframes rs-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  padding: 16px;
+}
+
+.modal-panel {
+  position: relative;
+  width: 100%;
+  max-width: 580px;
+  border-radius: 16px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  background: #0d1117;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8), 0 0 30px rgba(245, 158, 11, 0.15);
+}
+

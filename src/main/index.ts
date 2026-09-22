@@ -82,7 +82,14 @@ async function createWindow() {
     },
   });
 
-  mainWindow.setMenu(null);
+  const isHeadless = process.env.HEADLESS === 'true' || process.argv.includes('--headless');
+
+  if (!isHeadless) {
+    mainWindow.once('ready-to-show', () => {
+      mainWindow?.show();
+      mainWindow?.focus();
+    });
+  }
 
   registerIpcHandlers();
   await swarmEngine.init();
@@ -99,9 +106,11 @@ async function createWindow() {
     await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow?.show();
-  });
+  // Ensure window is shown if ready-to-show already fired during initial file load
+  if (!isHeadless && mainWindow && !mainWindow.isVisible()) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:') || url.startsWith('http:')) {

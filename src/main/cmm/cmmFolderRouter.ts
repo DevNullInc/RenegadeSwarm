@@ -38,17 +38,36 @@ export interface FolderRouterConfig {
   folderMappings: Record<string, string>;
 }
 
+// Windows reserved device names that cause OS hangs / driver errors when opened
+const WINDOWS_RESERVED_DEVICE_NAMES = new Set([
+  'con', 'prn', 'aux', 'nul',
+  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+]);
+
 export function sanitizePathSegment(name: string): string {
   if (!name) return '';
-  return name
+  let cleaned = name
     .replace(/\0/g, '')
     .replace(/[<>:"/\\|?*]/g, '_')
     .replace(/\.{2,}/g, '.')
     .trim();
+
+  // Neutralize Windows reserved device names (e.g. CON -> _RS_CON, NUL.safetensors -> _RS_NUL.safetensors)
+  const baseName = cleaned.split('.')[0].toLowerCase();
+  if (WINDOWS_RESERVED_DEVICE_NAMES.has(baseName)) {
+    cleaned = `_RS_${cleaned}`;
+  }
+
+  return cleaned;
 }
 
 export function normalizeFolderPath(dirPath: string): string {
   if (!dirPath) return '';
+  // Disallow UNC paths
+  if (dirPath.startsWith('\\\\') || dirPath.startsWith('//')) {
+    return '';
+  }
   const resolved = path.resolve(dirPath);
   return resolved;
 }
@@ -94,7 +113,9 @@ export class CmmFolderRouter {
   recordSessionDialogPath(selectedPath: string): void {
     if (!selectedPath) return;
     const norm = normalizeFolderPath(selectedPath);
-    this.sessionDialogPaths.add(norm.toLowerCase());
+    if (norm) {
+      this.sessionDialogPaths.add(norm.toLowerCase());
+    }
   }
 
   /**
@@ -111,8 +132,24 @@ export class CmmFolderRouter {
       return false;
     }
 
+    // Security check: Reject UNC network paths to prevent NetNTLM SMB coercion (CWE-359)
+    if (candidatePath.startsWith('\\\\') || candidatePath.startsWith('//')) {
+      return false;
+    }
+
     const normCandidate = path.resolve(candidatePath);
     const normCandidateLower = normCandidate.toLowerCase();
+
+    // Reject UNC path representations
+    if (normCandidateLower.startsWith('\\\\') || normCandidateLower.startsWith('//')) {
+      return false;
+    }
+
+    // Reject Windows reserved device names
+    const candidateBase = path.basename(normCandidateLower).split('.')[0];
+    if (WINDOWS_RESERVED_DEVICE_NAMES.has(candidateBase)) {
+      return false;
+    }
 
     // Reject OS system directories
     const sysRoots = [
@@ -144,10 +181,22 @@ export class CmmFolderRouter {
 
     // Check against configured roots
     const allowedRoots: string[] = [];
-    if (this.config.rootPath) allowedRoots.push(normalizeFolderPath(this.config.rootPath));
-    if (this.config.defaultDownloadFolder) allowedRoots.push(normalizeFolderPath(this.config.defaultDownloadFolder));
-    for (const f of this.config.cmmFolders) allowedRoots.push(normalizeFolderPath(f));
-    for (const f of this.config.customFolders) allowedRoots.push(normalizeFolderPath(f));
+    if (this.config.rootPath) {
+      const norm = normalizeFolderPath(this.config.rootPath);
+      if (norm) allowedRoots.push(norm);
+    }
+    if (this.config.defaultDownloadFolder) {
+      const norm = normalizeFolderPath(this.config.defaultDownloadFolder);
+      if (norm) allowedRoots.push(norm);
+    }
+    for (const f of this.config.cmmFolders) {
+      const norm = normalizeFolderPath(f);
+      if (norm) allowedRoots.push(norm);
+    }
+    for (const f of this.config.customFolders) {
+      const norm = normalizeFolderPath(f);
+      if (norm) allowedRoots.push(norm);
+    }
 
     // Also permit standard temporary or quarantine directory
     const tempDir = path.resolve(os.tmpdir()).toLowerCase();

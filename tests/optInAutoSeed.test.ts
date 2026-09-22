@@ -181,11 +181,61 @@ describe('Instant Opt-In Auto-Packaging & Swarm Seeding Flow', () => {
     expect(found?.state).toBe('seeding');
     expect(found?.totalBytes).toBe(manifest.totalSizeBytes);
 
+    // Verify .swarm.json sidecar was created in the model directory
+    const expectedSwarmJsonPath = path.join(tmpDir, 'dreamshaper_v8.swarm.json');
+    expect(fs.existsSync(expectedSwarmJsonPath)).toBe(true);
+    const parsedSwarmJson = JSON.parse(fs.readFileSync(expectedSwarmJsonPath, 'utf8'));
+    expect(parsedSwarmJson.hashes.infoHash).toBe(manifest.hashes.infoHash);
+
     // 8. Verify Opt-Out unseeds and removes the torrent
     swarmEngine.removeTorrent(manifest.hashes.infoHash, false);
     const updatedTorrents = swarmEngine.getActiveTorrents();
     expect(updatedTorrents.find((t) => t.infoHash === manifest.hashes.infoHash)).toBeUndefined();
     // Verify file still exists on disk
     expect(fs.existsSync(model!.file_path)).toBe(true);
+  });
+
+  it('persists seeding transfers across application restart and reloads them on init()', async () => {
+    const model = await cmmDbBridge.getModelById('model_123');
+    expect(model).not.toBeNull();
+
+    const manifest = await buildSwarmManifest({
+      modelFilePath: model!.file_path,
+      title: 'Persistent Model',
+      version: '1.0.0',
+      modelType: 'Checkpoint',
+      baseModel: 'SD 1.5',
+      creator: 'Renegade Creator',
+      description: 'Persistent test model',
+      tags: ['checkpoint'],
+      license: 'Other',
+    }, { precomputedModelSha256: model!.sha256 });
+
+    // Register seeding
+    swarmEngine.registerSeedingManifest(manifest, model!.file_path);
+    expect(swarmEngine.getTorrent(manifest.hashes.infoHash)).toBeDefined();
+
+    // Verify saved in SQLite transfers table
+    const transfers = await cmmDbBridge.getSwarmTransfers();
+    const foundInDb = transfers.find((t) => t.info_hash.toLowerCase() === manifest.hashes.infoHash.toLowerCase());
+    expect(foundInDb).toBeDefined();
+    expect(foundInDb?.state).toBe('seeding');
+    expect(foundInDb?.file_path).toBe(model!.file_path);
+
+    // Simulate app restart: stop SwarmEngine, create a fresh SwarmEngine instance, and init()
+    swarmEngine.stop();
+    const { SwarmEngine } = await import('../src/main/engine/swarmEngine');
+    const freshEngine = new SwarmEngine();
+    await freshEngine.init();
+
+    // Verify torrent is resident in active torrents on reload
+    const reloadedTorrent = freshEngine.getTorrent(manifest.hashes.infoHash);
+    expect(reloadedTorrent).toBeDefined();
+    expect(reloadedTorrent?.state).toBe('seeding');
+    expect(reloadedTorrent?.title).toBe('Persistent Model');
+    expect(reloadedTorrent?.savePath).toBe(model!.file_path);
+    expect(reloadedTorrent?.cmmSynced).toBe(true);
+
+    freshEngine.stop();
   });
 });

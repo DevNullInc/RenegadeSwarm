@@ -19,6 +19,7 @@
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
 import http from 'http';
 import { SwarmManifest } from '../../protocol/types';
 
@@ -53,6 +54,25 @@ export interface CmmStatusResult {
   folderMappings?: Record<string, string>;
 }
 
+/**
+ * Returns the platform-standard persistent SQLite database location for RenegadeCMM.
+ * - Windows: %APPDATA%\RenegadeCMM\renegadecmm.sqlite (C:\Users\<User>\AppData\Roaming\RenegadeCMM)
+ * - macOS:   ~/Library/Application Support/RenegadeCMM/renegadecmm.sqlite
+ * - Linux:   ~/.config/RenegadeCMM/renegadecmm.sqlite (or $XDG_CONFIG_HOME/RenegadeCMM)
+ */
+export function getDefaultPersistentCmmDbPath(): string {
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    return path.join(appData, 'RenegadeCMM', 'renegadecmm.sqlite');
+  } else if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'RenegadeCMM', 'renegadecmm.sqlite');
+  } else {
+    const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+    return path.join(xdgConfig, 'RenegadeCMM', 'renegadecmm.sqlite');
+  }
+}
+
 export class CmmDbBridge {
   private localDb: sqlite3.Database | null = null;
   private localDbPath: string;
@@ -70,17 +90,33 @@ export class CmmDbBridge {
   }
 
   discoverCmmDbPath(): string {
-    const candidatePaths = [
+    const defaultPersistent = getDefaultPersistentCmmDbPath();
+    const home = os.homedir();
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+
+    const candidatePaths: string[] = [
+      // 1. Primary Persistent Database Locations per OS standard
+      // Windows: %APPDATA%\RenegadeCMM\renegadecmm.sqlite
+      // macOS:   ~/Library/Application Support/RenegadeCMM/renegadecmm.sqlite
+      // Linux:   ~/.config/RenegadeCMM/renegadecmm.sqlite (or $XDG_CONFIG_HOME/RenegadeCMM)
+      defaultPersistent,
+      path.join(appData, 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(home, 'Library', 'Application Support', 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(xdgConfig, 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(home, '.config', 'RenegadeCMM', 'renegadecmm.sqlite'),
+
+      // 2. Sibling development and local workspace paths
       'D:/gitprojects/RenegadeCMM/renegadecmm.sqlite',
       'D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite',
       path.join(process.cwd(), '..', 'RenegadeCMM', 'renegadecmm.sqlite'),
       path.join(process.cwd(), 'renegadecmm.sqlite'),
-      path.join(process.env.APPDATA || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
-      path.join(process.env.APPDATA || '', 'civitai-model-manager', 'renegadecmm.sqlite'),
-      path.join(process.env.APPDATA || '', 'civitai-model-manager', 'civitai_manager.sqlite'),
-      path.join(process.env.USERPROFILE || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
-      path.join(process.env.HOME || '', '.config', 'renegadecmm', 'renegadecmm.sqlite'),
-      path.join(process.env.HOME || '', 'RenegadeCMM', 'renegadecmm.sqlite'),
+
+      // 3. Fallback / legacy locations
+      path.join(appData, 'civitai-model-manager', 'renegadecmm.sqlite'),
+      path.join(appData, 'civitai-model-manager', 'civitai_manager.sqlite'),
+      path.join(home, 'RenegadeCMM', 'renegadecmm.sqlite'),
+      path.join(home, '.config', 'renegadecmm', 'renegadecmm.sqlite'),
     ];
 
     for (const p of candidatePaths) {
@@ -290,14 +326,24 @@ export class CmmDbBridge {
               manifest_id TEXT,
               title TEXT NOT NULL,
               model_type TEXT NOT NULL,
+              base_model TEXT,
               state TEXT NOT NULL,
               total_bytes INTEGER NOT NULL,
               downloaded_bytes INTEGER DEFAULT 0,
               uploaded_bytes INTEGER DEFAULT 0,
               cmm_synced INTEGER DEFAULT 0,
-              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+              file_path TEXT,
+              manifest_json TEXT,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
-          `);
+          `, () => {
+            // Ensure columns exist on legacy databases
+            this.localDb?.run('ALTER TABLE swarm_transfers ADD COLUMN base_model TEXT;', () => {});
+            this.localDb?.run('ALTER TABLE swarm_transfers ADD COLUMN file_path TEXT;', () => {});
+            this.localDb?.run('ALTER TABLE swarm_transfers ADD COLUMN manifest_json TEXT;', () => {});
+            this.localDb?.run('ALTER TABLE swarm_transfers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;', () => {});
+          });
           this.localDb.run(`
             CREATE TABLE IF NOT EXISTS app_settings (
               key TEXT PRIMARY KEY,
@@ -308,6 +354,111 @@ export class CmmDbBridge {
           resolve();
         }
       });
+    });
+  }
+
+  async saveSwarmTransfer(data: {
+    infoHash: string;
+    manifestId?: string;
+    title: string;
+    modelType: string;
+    baseModel?: string;
+    state: string;
+    totalBytes: number;
+    downloadedBytes?: number;
+    uploadedBytes?: number;
+    filePath: string;
+    manifestJson?: string;
+    cmmSynced?: boolean;
+  }): Promise<boolean> {
+    if (!this.localDb) await this.initLocalDb();
+    const infoHash = data.infoHash.toLowerCase();
+    const query = `
+      INSERT INTO swarm_transfers (
+        info_hash, manifest_id, title, model_type, base_model, state,
+        total_bytes, downloaded_bytes, uploaded_bytes, file_path, manifest_json, cmm_synced, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(info_hash) DO UPDATE SET
+        manifest_id = COALESCE(excluded.manifest_id, swarm_transfers.manifest_id),
+        title = excluded.title,
+        model_type = excluded.model_type,
+        base_model = COALESCE(excluded.base_model, swarm_transfers.base_model),
+        state = excluded.state,
+        total_bytes = excluded.total_bytes,
+        downloaded_bytes = excluded.downloaded_bytes,
+        uploaded_bytes = excluded.uploaded_bytes,
+        file_path = COALESCE(excluded.file_path, swarm_transfers.file_path),
+        manifest_json = COALESCE(excluded.manifest_json, swarm_transfers.manifest_json),
+        cmm_synced = excluded.cmm_synced,
+        updated_at = CURRENT_TIMESTAMP;
+    `;
+    return new Promise((resolve) => {
+      this.localDb?.run(
+        query,
+        [
+          infoHash,
+          data.manifestId || null,
+          data.title,
+          data.modelType,
+          data.baseModel || null,
+          data.state,
+          data.totalBytes,
+          data.downloadedBytes || 0,
+          data.uploadedBytes || 0,
+          data.filePath,
+          data.manifestJson || null,
+          data.cmmSynced ? 1 : 0,
+        ],
+        (err) => {
+          if (err) {
+            console.warn('[CmmDbBridge] Error saving swarm transfer:', err.message);
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        }
+      );
+    });
+  }
+
+  async getSwarmTransfers(): Promise<
+    Array<{
+      info_hash: string;
+      manifest_id?: string;
+      title: string;
+      model_type: string;
+      base_model?: string;
+      state: string;
+      total_bytes: number;
+      downloaded_bytes: number;
+      uploaded_bytes: number;
+      file_path?: string;
+      manifest_json?: string;
+      cmm_synced: number;
+    }>
+  > {
+    if (!this.localDb) await this.initLocalDb();
+    return new Promise((resolve) => {
+      this.localDb?.all(
+        'SELECT * FROM swarm_transfers ORDER BY created_at DESC;',
+        (err, rows: any[]) => {
+          if (err || !Array.isArray(rows)) resolve([]);
+          else resolve(rows);
+        }
+      );
+    });
+  }
+
+  async deleteSwarmTransfer(infoHash: string): Promise<boolean> {
+    if (!this.localDb) await this.initLocalDb();
+    return new Promise((resolve) => {
+      this.localDb?.run(
+        'DELETE FROM swarm_transfers WHERE LOWER(info_hash) = LOWER(?);',
+        [infoHash.toLowerCase()],
+        (err) => {
+          resolve(!err);
+        }
+      );
     });
   }
 

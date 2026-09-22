@@ -436,6 +436,14 @@ export class PreDownloadVerifier {
           }
         } catch {}
       }
+
+      // 4. Save signed .swarm.json manifest file alongside model if manifest provided
+      if (manifest) {
+        try {
+          const swarmManifestFile = `${baseWithoutExt}.swarm.json`;
+          fs.writeFileSync(swarmManifestFile, JSON.stringify(manifest, null, 2), 'utf8');
+        } catch {}
+      }
     } catch {}
   }
 }

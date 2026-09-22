@@ -29,12 +29,16 @@ import { FORBIDDEN_EXTENSIONS } from '../../shared/cmmTypes';
 import { calculateOptimalPieceLength } from '../../protocol/crypto';
 
 import { contentInspector } from './contentInspector';
+import { trackerManager } from './trackerManager';
 
 export async function computeFileSha256(
   filePath: string,
   onProgress?: (bytesRead: number, totalBytes: number) => void,
   abortSignal?: AbortSignal
 ): Promise<string> {
+  if (!filePath || filePath.startsWith('\\\\') || filePath.startsWith('//')) {
+    throw new Error('Invalid file path: UNC paths are disallowed');
+  }
   return new Promise((resolve, reject) => {
     if (abortSignal?.aborted) {
       return reject(new Error('Operation aborted'));
@@ -93,6 +97,14 @@ export async function buildSwarmManifest(
   req: CreateSwarmPackageRequest,
   options?: BuildSwarmManifestOptions
 ): Promise<SwarmManifest> {
+  if (!req.modelFilePath || req.modelFilePath.startsWith('\\\\') || req.modelFilePath.startsWith('//')) {
+    throw new Error(`Security Exception: Invalid file path or UNC network path: ${req.modelFilePath}`);
+  }
+
+  if (req.previewFilePath && (req.previewFilePath.startsWith('\\\\') || req.previewFilePath.startsWith('//'))) {
+    throw new Error(`Security Exception: Invalid preview file path or UNC network path: ${req.previewFilePath}`);
+  }
+
   if (!fs.existsSync(req.modelFilePath)) {
     throw new Error(`Model file not found: ${req.modelFilePath}`);
   }
@@ -183,11 +195,7 @@ export async function buildSwarmManifest(
       infoHash,
     },
     files,
-    announceList: options?.announceList || [
-      ['udp://tracker.opentrackr.org:1337/announce'],
-      ['wss://tracker.webtorrent.dev'],
-      ['udp://tracker.openbittorrent.com:6969/announce'],
-    ],
+    announceList: options?.announceList || trackerManager.getAnnounceList(),
     urlList,
   };
 

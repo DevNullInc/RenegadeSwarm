@@ -31,6 +31,7 @@ export interface RenegadeSwarmApi {
   pauseTorrent: (req: TorrentControlRequest) => Promise<any>;
   resumeTorrent: (req: TorrentControlRequest) => Promise<any>;
   removeTorrent: (req: TorrentControlRequest) => Promise<any>;
+  reannounceTorrent: (req: TorrentControlRequest) => Promise<any>;
   createPackage: (req: CreateSwarmPackageRequest) => Promise<any>;
   getBandwidthSettings: () => Promise<any>;
   updateBandwidthSettings: (settings: Partial<BandwidthSettings>) => Promise<any>;
@@ -68,12 +69,19 @@ export interface RenegadeSwarmApi {
   verifyPreDownload: (req: any) => Promise<any>;
   searchDiscoveredModels: (req: any) => Promise<any>;
   getDiscoveryStats: () => Promise<any>;
+  getTrackerStats: () => Promise<any>;
+  syncTrackersNow: () => Promise<any>;
   startPackageJob: (req: CreateSwarmPackageRequest) => Promise<any>;
   getActivePackagingJob: () => Promise<any>;
   cancelPackagingJob: (jobId?: string) => Promise<any>;
   clearPackagingJob: () => Promise<any>;
   onPackageProgress: (callback: (progress: any) => void) => () => void;
   onCmmSisterWakeup: (callback: (payload: any) => void) => () => void;
+  getSystemDiagnostics: () => Promise<any>;
+  getLogEvents: (req?: { level?: string; limit?: number }) => Promise<any>;
+  clearLogEvents: () => Promise<any>;
+  getTabTelemetry: (tabId: string) => Promise<any>;
+  onDebugLog: (callback: (event: any) => void) => () => void;
 }
 
 const api: RenegadeSwarmApi = {
@@ -82,6 +90,7 @@ const api: RenegadeSwarmApi = {
   pauseTorrent: (req) => ipcRenderer.invoke('swarm:pauseTorrent', req),
   resumeTorrent: (req) => ipcRenderer.invoke('swarm:resumeTorrent', req),
   removeTorrent: (req) => ipcRenderer.invoke('swarm:removeTorrent', req),
+  reannounceTorrent: (req) => ipcRenderer.invoke('swarm:reannounceTorrent', req),
   createPackage: (req) => ipcRenderer.invoke('swarm:createPackage', req),
   startPackageJob: (req) => ipcRenderer.invoke('swarm:startPackageJob', req),
   getActivePackagingJob: () => ipcRenderer.invoke('swarm:getActivePackagingJob'),
@@ -137,7 +146,21 @@ const api: RenegadeSwarmApi = {
   verifyPreDownload: (req) => ipcRenderer.invoke('swarm:verifyPreDownload', req),
   searchDiscoveredModels: (req) => ipcRenderer.invoke('swarm:searchDiscoveredModels', req),
   getDiscoveryStats: () => ipcRenderer.invoke('swarm:getDiscoveryStats'),
+  getTrackerStats: () => ipcRenderer.invoke('swarm:getTrackerStats'),
+  syncTrackersNow: () => ipcRenderer.invoke('swarm:syncTrackersNow'),
+  getSystemDiagnostics: () => ipcRenderer.invoke('debug:getSystemDiagnostics'),
+  getLogEvents: (req) => ipcRenderer.invoke('debug:getLogEvents', req),
+  clearLogEvents: () => ipcRenderer.invoke('debug:clearLogEvents'),
+  getTabTelemetry: (tabId: string) => ipcRenderer.invoke('debug:getTabTelemetry', { tabId }),
+  onDebugLog: (callback: (event: any) => void) => {
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on('debug:logEvent', handler);
+    return () => {
+      ipcRenderer.removeListener('debug:logEvent', handler);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('renegadeSwarm', api);
+
 

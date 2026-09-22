@@ -36,94 +36,141 @@ export const AmberWarningModal: React.FC<AmberWarningModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl rounded-2xl border border-amber-500/50 bg-[#0d1117] p-6 shadow-2xl shadow-amber-950/40">
+    <div className="modal-backdrop">
+      <div className="modal-panel">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            padding: '4px',
+            borderRadius: '6px',
+          }}
         >
-          <X className="h-5 w-5" />
+          <X size={18} />
         </button>
 
         {/* Modal Header */}
-        <div className="flex items-start gap-4 mb-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
-            <AlertTriangle className="h-6 w-6" />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+          <div style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '10px',
+            background: 'rgba(245, 158, 11, 0.15)',
+            border: '1px solid rgba(245, 158, 11, 0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}>
+            <AlertTriangle size={22} color="#f59e0b" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff' }}>
               Unverified Community Model Notice
             </h3>
-            <p className="text-xs text-amber-300/80 mt-0.5">
+            <p style={{ fontSize: '12px', color: 'rgba(245, 158, 11, 0.85)', marginTop: '2px' }}>
               This model was discovered via peer swarm broadcast without a pinned creator key.
             </p>
           </div>
         </div>
 
         {/* Model Card Details */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 mb-4 space-y-2.5">
-          <div className="flex justify-between items-start">
+        <div style={{
+          borderRadius: '10px',
+          border: '1px solid var(--border-subtle)',
+          background: 'rgba(255, 255, 255, 0.03)',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div className="text-sm font-semibold text-white">{model.title}</div>
-              <div className="text-xs text-zinc-400">
-                Type: <span className="text-zinc-200">{model.modelType}</span> • Base:{' '}
-                <span className="text-zinc-200">{model.baseModel || 'Unknown'}</span>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff' }}>{model.title}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Type: <span style={{ color: '#fff' }}>{model.modelType}</span> • Base:{' '}
+                <span style={{ color: '#fff' }}>{model.baseModel || 'Unknown'}</span>
               </div>
             </div>
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-mono font-medium border bg-amber-500/10 text-amber-300 border-amber-500/30">
-              ⚪ Unverified / Community
+            <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
+              Community
             </span>
           </div>
 
-          <div className="text-xs font-mono bg-black/40 rounded p-2 text-zinc-400 break-all space-y-1">
-            <div>
-              <span className="text-zinc-500">InfoHash: </span>
-              {model.infoHash}
-            </div>
-            <div>
-              <span className="text-zinc-500">Creator: </span>
-              {model.creator} {model.creatorPublicKey ? `(${model.creatorPublicKey.slice(0, 12)}...)` : '(No key attached)'}
-            </div>
+          <div style={{
+            fontSize: '11px',
+            padding: '8px 10px',
+            borderRadius: '6px',
+            background: 'rgba(0, 0, 0, 0.4)',
+            color: 'var(--text-secondary)',
+            wordBreak: 'break-all',
+          }} className="mono">
+            <div><span style={{ color: 'var(--text-muted)' }}>InfoHash: </span>{model.infoHash}</div>
+            <div style={{ marginTop: '2px' }}><span style={{ color: 'var(--text-muted)' }}>Creator: </span>{model.creator} {model.creatorPublicKey ? `(${model.creatorPublicKey.slice(0, 12)}...)` : '(No key attached)'}</div>
           </div>
         </div>
 
         {/* Security Disclosures */}
-        <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/50 p-3.5 mb-6 space-y-2 text-xs text-zinc-300">
-          <div className="flex items-center gap-2 text-amber-400 font-semibold">
-            <ShieldAlert className="h-4 w-4 shrink-0" />
-            Automatic Endpoint Protections Active:
+        <div style={{
+          borderRadius: '10px',
+          border: '1px solid rgba(255, 255, 255, 0.06)',
+          background: 'rgba(0, 0, 0, 0.25)',
+          padding: '12px 14px',
+          marginBottom: '20px',
+          fontSize: '12px',
+          color: 'var(--text-secondary)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontWeight: 600, marginBottom: '6px' }}>
+            <ShieldAlert size={14} />
+            <span>Automatic Endpoint Protections Active:</span>
           </div>
-          <ul className="list-disc list-inside space-y-1 text-zinc-400 pl-1">
-            <li>
-              <span className="text-zinc-300">Quarantine Staging:</span> Weights will download to an isolated <code className="text-zinc-300">.quarantine/</code> folder.
-            </li>
-            <li>
-              <span className="text-zinc-300">Multi-Pass Validation:</span> Deep magic byte checks reject Windows PE, ELF, Mach-O executables, scripts, and ZIP polyglots.
-            </li>
-            <li>
-              <span className="text-zinc-300">Zero-Execution Guarantee:</span> Weight tensors are never executed and cannot run arbitrary code.
-            </li>
+          <ul style={{ paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px', lineHeight: 1.4 }}>
+            <li><strong>Quarantine Staging:</strong> Downloads to an isolated <code style={{ color: '#06b6d4' }}>.quarantine/</code> directory.</li>
+            <li><strong>Multi-Pass Inspection:</strong> Rejects executables, scripts, and ZIP polyglots.</li>
+            <li><strong>Zero-Execution Guarantee:</strong> Tensors are isolated and never executed.</li>
           </ul>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '10px' }}>
           <button
+            type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            className="btn-secondary"
+            style={{ padding: '8px 16px', fontSize: '12px' }}
           >
             Cancel
           </button>
           <button
+            type="button"
             onClick={() => {
               onClose();
               onProceed(model);
             }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-black shadow-lg shadow-amber-950/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              color: '#000',
+              border: 'none',
+              padding: '8px 18px',
+              borderRadius: '8px',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Proceed to Pre-Download Verification
+            <CheckCircle2 size={15} />
+            <span>Proceed to Pre-Download Verification</span>
           </button>
         </div>
       </div>

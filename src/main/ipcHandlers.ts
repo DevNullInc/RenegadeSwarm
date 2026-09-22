@@ -50,6 +50,8 @@ import { modelMetadataExtractor } from './metadata/modelMetadataExtractor';
 import { contentInspector } from './engine/contentInspector';
 import { preDownloadVerifier } from './engine/preDownloadVerifier';
 import { discoveryEngine } from './engine/discoveryEngine';
+import { trackerManager } from './engine/trackerManager';
+import { debugLogManager } from './telemetry/debugLogManager';
 
 let packageProgressBound = false;
 
@@ -231,6 +233,16 @@ export function registerIpcHandlers() {
       const { infoHash } = TorrentControlRequestSchema.parse(raw);
       const ok = swarmEngine.removeTorrent(infoHash);
       return { success: ok };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:reannounceTorrent', async (_, raw: unknown): Promise<IpcResponse> => {
+    try {
+      const { infoHash } = TorrentControlRequestSchema.parse(raw);
+      const result = await swarmEngine.reannounceTorrent(infoHash);
+      return { success: true, data: result };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -596,141 +608,51 @@ export function registerIpcHandlers() {
     try {
       const { modelId, optIn } = ToggleModelShareRequestSchema.parse(raw);
 
+      // 1. Try to find the model from CMM database to get SHA256 / path
+      let model: CmmLocalModelRow | null = null;
+      try {
+        model = await cmmDbBridge.getModelById(modelId);
+        if (!model) {
+          const allModels = await cmmDbBridge.getLocalModels(500);
+          model = allModels.find((m) => String(m.id) === String(modelId) || path.resolve(m.file_path).toLowerCase() === path.resolve(modelId).toLowerCase() || m.file_name === modelId) || null;
+        }
+      } catch {
+        // Ignore lookup errors
+      }
+
       if (optIn) {
-        // 1. Try to find the model from CMM database
-        let model: CmmLocalModelRow | null = null;
-        try {
-          model = await cmmDbBridge.getModelById(modelId);
-        } catch {
-          // Ignore lookup errors
+        sharingPolicyManager.toggleModelOptIn(modelId, true);
+        if (model?.sha256) {
+          sharingPolicyManager.toggleModelOptIn(model.sha256, true);
+        }
+        if (model?.file_path) {
+          cmmFolderRouter.recordSessionDialogPath(model.file_path);
         }
 
-        // 2. Determine target file path
-        let targetFilePath = model?.file_path || (fs.existsSync(modelId) ? modelId : null);
-
-        if (targetFilePath && fs.existsSync(targetFilePath)) {
-          // Ensure path is accessible/conforming
-          cmmFolderRouter.recordSessionDialogPath(targetFilePath);
-
-          // Extract model metadata (combines safetensors headers, CMM DB, civitai/hf, etc.)
-          let extractedMeta: any = {};
-          try {
-            extractedMeta = await modelMetadataExtractor.extractMetadata(targetFilePath);
-          } catch (metaErr) {
-            console.warn('[Ipc] Metadata extraction warning during auto-seed:', metaErr);
-          }
-
-          // Fetch user identity for Ed25519 signing
-          let identity = keyringManager.getInternalUserIdentity();
-          if (!identity) {
-            try {
-              keyringManager.generateNewIdentity('Renegade Creator', true);
-              identity = keyringManager.getInternalUserIdentity();
-            } catch {
-              // Ignore identity generation error
-            }
-          }
-
-          const modelFileName = model?.file_name || path.basename(targetFilePath);
-          const rawTitle = model?.civitai_name || extractedMeta.title || modelFileName;
-          const title = rawTitle.replace(/\.(safetensors|gguf|bin|pt|pth|onnx|ckpt)$/i, '');
-          const modelType = (model?.model_type || extractedMeta.modelType || 'Checkpoint') as any;
-          const baseModel = extractedMeta.baseModel || 'SDXL 1.0';
-          const creator = identity?.creatorName || extractedMeta.creator || 'Renegade Creator';
-
-          const createPkgReq: CreateSwarmPackageRequest = {
-            modelFilePath: targetFilePath,
-            title: title || modelFileName,
-            version: extractedMeta.version || '1.0.0',
-            modelType,
-            baseModel,
-            creator,
-            description: extractedMeta.description || 'Auto-seeded from RenegadeCMM',
-            tags: extractedMeta.tags && extractedMeta.tags.length > 0 ? extractedMeta.tags : ['ai-model', String(modelType).toLowerCase()],
-            previewFilePath: extractedMeta.previewFilePath && fs.existsSync(extractedMeta.previewFilePath) ? extractedMeta.previewFilePath : undefined,
-            civitaiModelId: model?.civitai_model_id || extractedMeta.civitaiModelId,
-            civitaiVersionId: model?.civitai_version_id || extractedMeta.civitaiVersionId,
-            hfRepoId: model?.hf_repo_id || extractedMeta.hfRepoId,
-            hfCommitSha: model?.hf_commit_sha,
-            license: extractedMeta.license || 'Other',
-          };
-
-          const precomputedSha256 = model?.sha256 || extractedMeta.sha256;
-          const manifest = await buildSwarmManifest(createPkgReq, {
-            precomputedModelSha256: precomputedSha256,
-          });
-
-          if (identity?.publicKeyHex) {
-            manifest.model.creatorPublicKey = identity.publicKeyHex;
-          }
-
-          // Cryptographically sign the manifest if private key is available
-          if (identity && identity.privateKeyHex && identity.publicKeyHex) {
-            try {
-              manifest.signature = signSwarmManifest(manifest, identity.privateKeyHex, identity.publicKeyHex);
-            } catch (signErr) {
-              console.warn('[Ipc] Failed to sign manifest during auto-seed:', signErr);
-            }
-          }
-
-          // Register and immediately start seeding in SwarmEngine
-          swarmEngine.registerSeedingManifest(manifest, targetFilePath);
-
-          // Update CMM metadata if sha256 or extra details were computed
-          if (!model?.sha256 && manifest.hashes.sha256) {
-            await cmmDbBridge.updateModelMetadata({
-              filePath: targetFilePath,
-              sha256: manifest.hashes.sha256,
-              civitaiModelId: createPkgReq.civitaiModelId,
-              civitaiVersionId: createPkgReq.civitaiVersionId,
-              civitaiName: createPkgReq.title,
-              modelType: createPkgReq.modelType,
-              baseModel: createPkgReq.baseModel,
-            }).catch(() => {});
-          }
-
-          // Opt-in both the modelId and infoHash in sharing policy
-          sharingPolicyManager.toggleModelOptIn(modelId, true);
-          sharingPolicyManager.toggleModelOptIn(manifest.hashes.infoHash, true);
-
-          return {
-            success: true,
-            data: {
-              modelId,
-              optIn: true,
-              manifest,
-              policy: sharingPolicyManager.getPolicy(),
-            },
-          };
-        } else {
-          // If file path not found on disk, still record opt-in in policy
-          sharingPolicyManager.toggleModelOptIn(modelId, true);
-          return {
-            success: true,
-            data: {
-              modelId,
-              optIn: true,
-              policy: sharingPolicyManager.getPolicy(),
-            },
-          };
-        }
+        return {
+          success: true,
+          data: {
+            modelId,
+            optIn: true,
+            policy: sharingPolicyManager.getPolicy(),
+          },
+        };
       } else {
         // Opt-Out flow
         sharingPolicyManager.toggleModelOptIn(modelId, false);
+        if (model?.sha256) {
+          sharingPolicyManager.toggleModelOptIn(model.sha256, false);
+        }
 
         // Find and stop active torrent seeding this model without deleting local data
-        let model: CmmLocalModelRow | null = null;
-        try {
-          model = await cmmDbBridge.getModelById(modelId);
-        } catch {}
-
         const activeTorrents = swarmEngine.getActiveTorrents();
         for (const t of activeTorrents) {
           const matchId = t.infoHash.toLowerCase() === modelId.toLowerCase();
+          const matchSha = model?.sha256 && t.infoHash.toLowerCase() === model.sha256.toLowerCase();
           const matchPath = model && t.savePath && path.resolve(t.savePath).toLowerCase() === path.resolve(model.file_path).toLowerCase();
           const matchDirectPath = t.savePath && path.resolve(t.savePath).toLowerCase() === path.resolve(modelId).toLowerCase();
 
-          if (matchId || matchPath || matchDirectPath) {
+          if (matchId || matchSha || matchPath || matchDirectPath) {
             swarmEngine.removeTorrent(t.infoHash, false);
             sharingPolicyManager.toggleModelOptIn(t.infoHash, false);
           }
@@ -746,7 +668,7 @@ export function registerIpcHandlers() {
         };
       }
     } catch (err: any) {
-      return { success: false, error: err.message };
+      return { success: false, error: err.message || 'Failed to toggle model share status' };
     }
   });
 
@@ -871,6 +793,61 @@ export function registerIpcHandlers() {
       return { success: false, error: err.message };
     }
   });
+
+  // BitTorrent Trackers & Blacklist Synchronization Handlers
+  ipcMain.handle('swarm:getTrackerStats', async (): Promise<IpcResponse> => {
+    try {
+      const stats = trackerManager.getStats();
+      return { success: true, data: stats };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('swarm:syncTrackersNow', async (): Promise<IpcResponse> => {
+    try {
+      const result = await trackerManager.syncTrackers(true);
+      return { success: result.success, data: trackerManager.getStats() };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  // Debug & Diagnostics IPC Handlers
+  ipcMain.handle('debug:getSystemDiagnostics', async (): Promise<IpcResponse> => {
+    try {
+      const diag = debugLogManager.getSystemDiagnostics();
+      return { success: true, data: diag };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('debug:getLogEvents', async (_, raw?: { level?: any; limit?: number }): Promise<IpcResponse> => {
+    try {
+      const logs = debugLogManager.getLogEvents(raw?.level, raw?.limit);
+      return { success: true, data: logs };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('debug:clearLogEvents', async (): Promise<IpcResponse> => {
+    try {
+      debugLogManager.clearLogs();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.handle('debug:getTabTelemetry', async (_, raw?: { tabId?: string }): Promise<IpcResponse> => {
+    try {
+      const tabId = raw?.tabId || 'dashboard';
+      const telemetry = debugLogManager.getTabTelemetry(tabId);
+      return { success: true, data: telemetry };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  });
 }
-
-

@@ -45,6 +45,7 @@ import {
 import { KeyringEntry, TrustLevel } from '../../protocol/keyring';
 import { UserIdentityPublic, LockoutStatus, ModelFolderEntry } from '../../shared/ipcContracts';
 import { SharingPolicySettings } from '../../protocol/sharingPolicy';
+import { TabDebugDrawer } from './TabDebugDrawer';
 
 interface SettingsViewProps {
   cmmDbPath: string;
@@ -52,6 +53,7 @@ interface SettingsViewProps {
   sharingPolicy: SharingPolicySettings;
   onSyncCmmConfig: (dbPath: string, rootPath?: string) => Promise<boolean>;
   onUpdateSharingPolicy: (policy: Partial<SharingPolicySettings>) => Promise<void>;
+  devMode?: boolean;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -59,6 +61,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   sharingPolicy,
   onSyncCmmConfig,
   onUpdateSharingPolicy,
+  devMode = false,
 }) => {
   const [activeSection, setActiveSection] = useState<'keyring' | 'identity' | 'paths' | 'privacy'>('keyring');
   const [keyringEntries, setKeyringEntries] = useState<KeyringEntry[]>([]);
@@ -2324,6 +2327,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* In-Tab Debug & Telemetry Drawer */}
+      <TabDebugDrawer tabId="settings" devMode={devMode} tabLabel="Keyring & Web of Trust Security" />
     </div>
   );
 };

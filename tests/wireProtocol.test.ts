@@ -42,8 +42,10 @@ describe('BitTorrent Wire Protocol (BEP 3 & Framing)', () => {
     expect(parsed!.pstr).toBe(PROTOCOL_STRING);
     expect(parsed!.infoHash).toBe(infoHash.toLowerCase());
     expect(parsed!.peerId).toBe(peerId.toLowerCase());
-    // Check BEP 10 extension bit
+    // Check BEP 10 extension bit (byte index 25 / reserved[5] == 0x10)
     expect(parsed!.reserved[5] & 0x10).toBe(0x10);
+    // Check BEP 5 DHT support flag (byte index 27 / reserved[7] == 0x01)
+    expect(parsed!.reserved[7] & 0x01).toBe(0x01);
   });
 
   it('should serialize standard wire messages with correct 4-byte length prefix and ID', () => {

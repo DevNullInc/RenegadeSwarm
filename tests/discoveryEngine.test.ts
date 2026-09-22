@@ -146,4 +146,30 @@ describe('DiscoveryEngine Service', () => {
     engine.unregisterDiscoveryPeer('peer-abc-123');
     expect(engine.getConnectedDiscoveryPeersCount()).toBe(0);
   });
+
+  it('should find active local seeded models matching search terms like Anima', async () => {
+    engine.indexLocalModel({
+      infoHash: 'aabbccddeeff00112233445566778899aabbccdd',
+      title: 'Anima-Pencil-XL-v1.0',
+      version: '1.0.0',
+      modelType: 'CHECKPOINT',
+      baseModel: 'SDXL 1.0',
+      totalSizeBytes: 6900000000,
+      creator: 'Local Seeder',
+      tags: ['anime', 'illustration', 'pencil'],
+      description: 'Anima anime style checkpoint',
+      publishedAt: Date.now(),
+      urlList: [],
+    });
+
+    const results = await engine.search('Anima');
+    expect(results).toHaveLength(1);
+    expect(results[0].title).toBe('Anima-Pencil-XL-v1.0');
+    expect(results[0].peerCount).toBeGreaterThanOrEqual(1);
+
+    // Case-insensitive query
+    const resultsLower = await engine.search('anima');
+    expect(resultsLower).toHaveLength(1);
+    expect(resultsLower[0].title).toBe('Anima-Pencil-XL-v1.0');
+  });
 });

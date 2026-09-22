@@ -24,6 +24,7 @@ import { SeederView } from './components/SeederView';
 import { CmmSyncView } from './components/CmmSyncView';
 import { BandwidthView } from './components/BandwidthView';
 import { SettingsView } from './components/SettingsView';
+import { AboutView } from './components/AboutView';
 import { SwarmTorrentStatus } from '../protocol/types';
 import { BandwidthSettings, CreateSwarmPackageRequest } from '../shared/ipcContracts';
 import { SharingPolicySettings, DEFAULT_SHARING_POLICY } from '../protocol/sharingPolicy';
@@ -37,6 +38,7 @@ declare global {
       pauseTorrent: (req: any) => Promise<{ success: boolean; error?: string }>;
       resumeTorrent: (req: any) => Promise<{ success: boolean; error?: string }>;
       removeTorrent: (req: any) => Promise<{ success: boolean; error?: string }>;
+      reannounceTorrent: (req: any) => Promise<{ success: boolean; data?: any; error?: string }>;
       createPackage: (req: any) => Promise<{ success: boolean; data?: any; error?: string }>;
       getBandwidthSettings: () => Promise<{ success: boolean; data?: BandwidthSettings; error?: string }>;
       updateBandwidthSettings: (settings: Partial<BandwidthSettings>) => Promise<{ success: boolean; data?: BandwidthSettings; error?: string }>;
@@ -110,12 +112,34 @@ declare global {
       clearPackagingJob: () => Promise<{ success: boolean; error?: string }>;
       onPackageProgress: (callback: (progress: import('../shared/ipcContracts').PackageJobProgress) => void) => () => void;
       onCmmSisterWakeup?: (callback: (payload: { source: string; ts: number }) => void) => () => void;
+      getSystemDiagnostics?: () => Promise<{ success: boolean; data?: import('../shared/ipcContracts').SystemDiagnostics; error?: string }>;
+      getLogEvents?: (req?: { level?: string; limit?: number }) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').DiagnosticLogEvent[]; error?: string }>;
+      clearLogEvents?: () => Promise<{ success: boolean; error?: string }>;
+      getTabTelemetry?: (tabId: string) => Promise<{ success: boolean; data?: import('../shared/ipcContracts').TabTelemetry; error?: string }>;
+      onDebugLog?: (callback: (event: import('../shared/ipcContracts').DiagnosticLogEvent) => void) => () => void;
     };
   }
 }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [devMode, setDevMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('renegadeswarm_devmode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleDevMode = () => {
+    setDevMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('renegadeswarm_devmode', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [torrents, setTorrents] = useState<SwarmTorrentStatus[]>([]);
   const [bandwidthSettings, setBandwidthSettings] = useState<BandwidthSettings>({
     maxDownloadSpeedKbps: 0,
@@ -134,8 +158,8 @@ export default function App() {
   const [cmmConnected, setCmmConnected] = useState(false);
   const [cmmDiscovered, setCmmDiscovered] = useState(false);
   const [cmmModelCount, setCmmModelCount] = useState(0);
-  const [cmmDbPath, setCmmDbPath] = useState('D:\\gitprojects\\RenegadeCMM\\renegadecmm.sqlite');
-  const [comfyModelsRoot, setComfyModelsRoot] = useState('D:\\ComfyUI\\models');
+  const [cmmDbPath, setCmmDbPath] = useState('');
+  const [comfyModelsRoot, setComfyModelsRoot] = useState('');
   const [isCheckingCmm, setIsCheckingCmm] = useState(false);
   const [cmmProbeBudget, setCmmProbeBudget] = useState(5);
 
@@ -418,6 +442,7 @@ export default function App() {
       }
       await fetchTorrents();
       await fetchSharingPolicy();
+      await fetchCmmModels();
     } else {
       // Local state fallback for mock preview
       const opted = new Set(sharingPolicy.optedInModelIds);
@@ -441,6 +466,8 @@ export default function App() {
         isCheckingCmm={isCheckingCmm}
         cmmProbeBudget={cmmProbeBudget}
         onRetryCmm={handleManualRetryCmm}
+        devMode={devMode}
+        onToggleDevMode={handleToggleDevMode}
       />
 
       <main style={{ flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
@@ -451,6 +478,7 @@ export default function App() {
             onPause={handlePause}
             onResume={handleResume}
             onRemove={handleRemove}
+            devMode={devMode}
           />
         )}
         {activeTab === 'discovery' && (
@@ -459,12 +487,14 @@ export default function App() {
               handleAddMagnet(magnetUri);
               setActiveTab('dashboard');
             }}
+            devMode={devMode}
           />
         )}
         {activeTab === 'seeder' && (
           <SeederView
             onCreatePackage={handleCreatePackage}
             initialModel={selectedSeederModel}
+            devMode={devMode}
           />
         )}
         {activeTab === 'cmm' && (
@@ -472,6 +502,7 @@ export default function App() {
             cmmDbPath={cmmDbPath}
             comfyModelsRoot={comfyModelsRoot}
             models={cmmModels}
+            activeTorrents={torrents}
             sharingPolicy={sharingPolicy}
             cmmConnected={cmmConnected}
             cmmDiscovered={cmmDiscovered}
@@ -485,8 +516,10 @@ export default function App() {
               setActiveTab('seeder');
             }}
             onToggleModelShare={handleToggleModelShare}
+            onNavigateTab={setActiveTab}
             onInstallCmm={handleInstallCmm}
             onAutoDetect={handleAutoDetectCmm}
+            devMode={devMode}
           />
         )}
         {activeTab === 'bandwidth' && (
@@ -495,6 +528,7 @@ export default function App() {
             sharingPolicy={sharingPolicy}
             onUpdateSettings={handleUpdateBandwidth}
             onUpdateSharingPolicy={handleUpdateSharingPolicy}
+            devMode={devMode}
           />
         )}
         {activeTab === 'settings' && (
@@ -504,7 +538,11 @@ export default function App() {
             sharingPolicy={sharingPolicy}
             onSyncCmmConfig={handleSyncCmmConfig}
             onUpdateSharingPolicy={handleUpdateSharingPolicy}
+            devMode={devMode}
           />
+        )}
+        {activeTab === 'about' && (
+          <AboutView devMode={devMode} />
         )}
       </main>
     </div>

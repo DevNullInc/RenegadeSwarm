@@ -147,12 +147,20 @@ describe('SwarmDaemonServer HTTP Bridge (:5180)', () => {
     expect(res.data.cmm).toBeDefined();
   });
 
-  it('should handle CORS preflight OPTIONS request for approved origins', async () => {
+  it('should respond with active swarms on /api/swarms', async () => {
+    const res = await makeRequest('GET', '/api/swarms');
+    expect(res.status).toBe(200);
+    expect(res.data.online).toBe(true);
+    expect(Array.isArray(res.data.swarms)).toBe(true);
+  });
+
+  it('should handle CORS preflight OPTIONS request for approved origins and renegadeinc.net', async () => {
     const res = await makeRequest('OPTIONS', '/api/health', undefined, {
-      origin: 'http://127.0.0.1:5174',
+      origin: 'https://swarm.renegadeinc.net',
     });
     expect(res.status).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('http://127.0.0.1:5174');
+    expect(res.headers['access-control-allow-origin']).toBe('https://swarm.renegadeinc.net');
+    expect(res.headers['access-control-allow-private-network']).toBe('true');
   });
 
   it('should acknowledge sister wakeup on POST /api/sister/wakeup and notify window', async () => {

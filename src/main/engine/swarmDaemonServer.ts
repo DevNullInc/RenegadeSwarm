@@ -17,6 +17,7 @@
  */
 
 import http from 'http';
+import path from 'path';
 import { BrowserWindow } from 'electron';
 import { swarmEngine } from './swarmEngine';
 import { cmmDbBridge } from '../cmm/cmmDbBridge';
@@ -154,23 +155,23 @@ export class SwarmDaemonServer {
       return;
     }
 
-    // Security check 2: CORS / Origin validation for local development & CMM bridge
+    // Security check 2: CORS / Origin validation for local development, SwarmTracker, & CMM bridge
     const origin = req.headers.origin || '';
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://localhost:5174',
-      'http://127.0.0.1:5174',
-      'http://localhost:5180',
-      'http://127.0.0.1:5180',
-      'http://localhost:5181',
-      'http://127.0.0.1:5181',
-    ];
+    const isAllowedOrigin =
+      !origin ||
+      origin.startsWith('http://localhost') ||
+      origin.startsWith('http://127.0.0.1') ||
+      origin.startsWith('https://localhost') ||
+      origin.startsWith('https://127.0.0.1') ||
+      origin === 'https://swarm.renegadeinc.net' ||
+      origin === 'http://swarm.renegadeinc.net' ||
+      /^https?:\/\/([a-zA-Z0-9-]+\.)*renegadeinc\.net(:\d+)?$/.test(origin);
 
-    if (origin && allowedOrigins.includes(origin)) {
+    if (origin && isAllowedOrigin) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Swarm-Auth-Token, Accept');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Swarm-Auth-Token, Accept, Access-Control-Request-Private-Network');
+      res.setHeader('Access-Control-Allow-Private-Network', 'true');
     }
 
     if (req.method === 'OPTIONS') {
@@ -200,7 +201,73 @@ export class SwarmDaemonServer {
       });
     };
 
-    // Route 1: Health & Telemetry Check (Public on 127.0.0.1 - Zero Secrets Exposed)
+    // Route 1: Swarm Directory & Active Seeds (Public on 127.0.0.1 - Zero Secrets Exposed)
+    if (
+      (pathname === '/api/swarms' || pathname === '/api/torrents' || pathname === '/api/feed') &&
+      req.method === 'GET'
+    ) {
+      const activeTorrents = swarmEngine.getActiveTorrents();
+      const swarmsData = activeTorrents.map((t) => {
+        const manifest = (swarmEngine as any).manifests?.get(t.infoHash);
+        return {
+          infoHash: t.infoHash,
+          manifestId: t.manifestId || manifest?.manifestId || 'unresolved',
+          title: t.title,
+          version: manifest?.model?.version || '1.0.0',
+          modelType: t.modelType,
+          baseModel: t.baseModel || manifest?.model?.baseModel || 'Universal',
+          creator: manifest?.model?.creator || 'LocalSeeder',
+          creatorPublicKey: manifest?.signature?.publicKey || '',
+          trustLevel: manifest?.signature ? 'VerifiedCreator' : 'Community',
+          isVerified: Boolean(manifest?.signature),
+          nsfw: Boolean(manifest?.model?.nsfw),
+          description: manifest?.model?.description || `Decentralized AI model package actively seeded on RenegadeSwarm.`,
+          tags: manifest?.model?.tags || [],
+          totalBytes: t.totalBytes,
+          seeders: Math.max(1, t.seedersConnected || 1),
+          leechers: t.peersConnected || 0,
+          completed: 1,
+          ratio: t.ratio || 0.0,
+          healthScore: 100,
+          healthStatus: 'Healthy',
+          isLocalSeeder: true,
+          savePath: t.savePath,
+          files: manifest?.files || [
+            {
+              relativePath: path.basename(t.savePath || t.title),
+              sizeBytes: t.totalBytes,
+              fileType: 'Model',
+              targetSubfolder: (t.modelType || 'checkpoints').toLowerCase(),
+              sha256: manifest?.hashes?.sha256 || '',
+            },
+          ],
+          hashes: manifest?.hashes || {
+            sha256: manifest?.hashes?.sha256 || '',
+            infoHash: t.infoHash,
+          },
+          signature: manifest?.signature,
+        };
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          online: true,
+          version: '0.3.0',
+          daemon_version: '0.3.0',
+          peers: activeTorrents.reduce((acc, t) => acc + (t.peersConnected || 0), 0),
+          seeding: activeTorrents.filter((t) => t.state === 'seeding').length,
+          downloading: activeTorrents.filter((t) => t.state === 'downloading').length,
+          totalSwarms: activeTorrents.length,
+          swarms: swarmsData,
+          timestamp: Date.now(),
+        })
+      );
+      return;
+    }
+
+    // Route 2: Health & Telemetry Check (Public on 127.0.0.1 - Zero Secrets Exposed)
     if (
       (pathname === '/api/health' || pathname === '/health' || pathname === '/api/status') &&
       req.method === 'GET'
