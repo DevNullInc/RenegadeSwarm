@@ -15,6 +15,16 @@ The software developers, maintainers, copyright holders, and GitHub repository a
 2. **Zero Custody of Content**: We **do not host, cache, transmit, index, seed, or possess** any AI model checkpoints, LoRAs, UNet weights, datasets, or user files.
 3. **Decentralized Operation**: File transfers occur directly between autonomous, decentralized end-user endpoints over the BitTorrent protocol and the Mainline Distributed Hash Table (DHT).
 
+### 1.5 Common Carrier & Mere Conduit Status (17 U.S.C. § 512(a))
+
+RenegadeSwarm functions as a **transitory digital network communications** system under 17 U.S.C. § 512(a):
+
+1. **Transitory Network Communications**: The software provides automatic, technical, transient transmission of material between network nodes without modification.
+2. **No Storage**: RenegadeSwarm does not store transmitted material on its systems for longer than necessary for transmission.
+3. **No Selection**: The protocol does not select the content, recipients, or timing of transmissions—users control all aspects of sharing.
+
+This qualifies RenegadeSwarm for the **DMCA § 512(a) safe harbor** for transitory network communications, analogous to internet service providers, VPN networks, and the Tor network.
+
 ---
 
 ## 2. Notice of Technical Impossibility Regarding Takedowns
@@ -63,7 +73,9 @@ RenegadeSwarm is distributed exclusively as a neutral technological tool capable
 * **Research & Academic Datasets**: Efficient dissemination of public-domain scientific datasets and foundation models.
 * **Community Fine-Tuning**: Bandwidth-efficient P2P sharing of custom user-created LoRAs, VAEs, and workflows without reliance on centralized hosting monopolies.
 
-The developers **do not promote, encourage, solicit, or induce** copyright infringement (*MGM Studios, Inc. v. Grokster, Ltd.*, 545 U.S. 913).
+The developers **do not promote, encourage, solicit, or induce** copyright infringement. RenegadeSwarm is marketed and distributed exclusively as a neutral technical tool for legitimate AI model distribution, with no advertising or messaging targeting users seeking to infringe copyright (*MGM Studios, Inc. v. Grokster, Ltd.*, 545 U.S. 913).
+
+**Protocol vs. Platform Distinction**: Unlike centralized platforms, RenegadeSwarm is a **protocol implementation**—functionally equivalent to BitTorrent, HTTP, or TCP/IP. The legal status of protocol-layer technologies differs fundamentally from platform-layer services.
 
 ---
 

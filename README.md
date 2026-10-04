@@ -14,7 +14,17 @@
 
 ## Overview
 
-**RenegadeSwarm** is an uncensored, community-powered P2P distribution network engineered specifically for large generative AI and LLM models (Checkpoints, LoRAs, UNets, GGUFs, VAEs, Text Encoders). It empowers creators and users to seed, download, and index multi-gigabyte models without gatekeeping, centralized bandwidth throttling, rate limits, or single-point-of-failure hosting dependencies.
+**RenegadeSwarm** is a decentralized, privacy-preserving P2P distribution protocol engineered specifically for large generative AI and LLM models (Checkpoints, LoRAs, UNets, GGUFs, VAEs, Text Encoders). It empowers creators and users to seed, download, and index multi-gigabyte models enabling efficient, fault-tolerant distribution without centralized infrastructure dependencies.
+
+### Protocol Neutrality & Common Carrier Status
+
+RenegadeSwarm operates as a **content-agnostic protocol layer**, similar to BitTorrent, TCP/IP, or HTTP. The software functions as a **neutral transmission protocol** only and does not:
+- Host, store, or cache content
+- Exercise editorial control over transmitted data
+- Monitor or inspect the content of encrypted transfers
+- Induce, encourage, or facilitate copyright infringement
+
+As a protocol-layer technology, RenegadeSwarm is designed for substantial non-infringing uses including open-source AI research, academic dataset distribution, and community model sharing under permissive licenses.
 
 RenegadeSwarm is designed from the ground up to work seamlessly with [**RenegadeCMM**](https://github.com/DevNullInc/RenegadeCMM), matching its ComfyUI directory hierarchies, canonical file naming standards (`model_name_author.extension`), cryptographic model hashing pipeline, and live SQLite database store.
 

@@ -68,7 +68,16 @@ All data created or processed by RenegadeSwarm is stored locally within your use
 ```
 
 ### A. Machine-Bound Cryptographic Key Vault & Hardware Binding Disclosure
-* **Machine Fingerprinting & Hardware Binding**: To safeguard private cryptographic keys against offline exfiltration, identity theft, and network spoofing, RenegadeSwarm binds local key encryption to the host machine's physical hardware and operating system profile (e.g. Windows DPAPI user/machine master keys, macOS Keychain / Secure Enclave hardware identifiers, Linux Secret Service / `/etc/machine-id`, and local host/user entropy).
+* **Local Hardware Entropy for Cryptographic Key Generation**: To generate cryptographically secure private keys that cannot be exported or stolen, RenegadeSwarm binds local key encryption to the host machine's physical hardware and operating system profile (e.g. Windows DPAPI user/machine master keys, macOS Keychain / Secure Enclave hardware identifiers, Linux Secret Service / `/etc/machine-id`, and local host/user entropy).
+
+**Clarification on "Fingerprinting"**:
+- **Purpose**: Generate unique entropy for local key generation only
+- **Data Used**: CPU features, motherboard serial, disk ID (local entropy sources)
+- **Transmission**: **NEVER transmitted** — used only for local AES-256-GCM key derivation
+- **Reversibility**: Hardware profile cannot be reconstructed from public keys
+- **Third-party visibility**: Zero — no hardware data leaves your machine
+
+This is **not "device fingerprinting"** for tracking or surveillance. It is **local entropy collection** for cryptographic security, functionally equivalent to `/dev/urandom` or hardware security modules (HSMs).
 * **Anti-Spoofing & Payload Protection**: This machine binding guarantees that private signing keys cannot be extracted, duplicated, or decrypted on another device, preventing malicious actors from copying vault files to forge creator identities or sign malicious model payloads across the swarm.
 * **Zero Telemetry Notice**: All machine fingerprinting and hardware entropy derivation occurs strictly in local process memory. This hardware profile is **never transmitted, logged, phoned home, or shared with third parties or peer nodes**.
 * **Protection at Rest**: Private Ed25519 signing keys are protected using **native OS safeStorage** in the Electron Main process and are never exposed across renderer IPC or network bridges. Plaintext private keys are never stored on disk or transmitted over the network.
@@ -78,6 +87,17 @@ All data created or processed by RenegadeSwarm is stored locally within your use
 * `renegadeswarm.sqlite` stores active transfer statuses, custom model folder paths, bandwidth allocations, and local sharing permissions.
 * The application communicates with your local RenegadeCMM database (`renegadecmm.sqlite`) through direct local SQLite `ATTACH DATABASE` operations, with zero cloud relays.
 * The local HTTP daemon bridge (`127.0.0.1:5180`) restricts mutating operations and database metadata inspection via timing-safe cryptographic Bearer tokens.
+
+### C. No Content Inspection or Monitoring
+
+RenegadeSwarm operates on a **zero-knowledge principle** regarding user content:
+
+1. **Encrypted Transit**: All P2P transfers use BitTorrent protocol encryption (RC4/Plaintext obfuscation)
+2. **No Deep Packet Inspection**: The protocol does not inspect, classify, or analyze the semantic content of transferred files
+3. **No Metadata Harvesting**: File contents are never scanned for keywords, classifications, or content types
+4. **Local-Only Validation**: Magic-byte validation occurs only for local file type safety (preventing executable injection), not for content monitoring
+
+**Technical Reality**: RenegadeSwarm is **content-blind by design**. The protocol sees only encrypted data blocks, SHA256 hashes, and BitTorrent wire protocol messages. This architecture is **intentional** to preserve user privacy and ensure the software cannot be repurposed as a surveillance tool.
 
 ---
 

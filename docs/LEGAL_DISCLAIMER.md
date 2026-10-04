@@ -13,6 +13,20 @@
 2. **Decentralized Operation**: All swarms, transfers, and metadata distribution occur directly between autonomous end-user nodes via the Mainline BitTorrent Distributed Hash Table (DHT) and user-specified Web Seeds.
 3. **No Editorial or Administrative Control**: The creators and contributors have no technical ability, editorial oversight, administrative access, or supervisory capability to monitor, censor, intercept, modify, or terminate any data transferred across the decentralized network.
 
+### 1.5 Protocol vs. Platform Distinction
+
+RenegadeSwarm is **protocol-layer software**, not a platform or service:
+
+| Characteristic | Platform (e.g., YouTube) | Protocol (e.g., BitTorrent) | RenegadeSwarm |
+|----------------|------------------------|----------------------------|---------------|
+| **Content hosting** | Yes | No | **No** |
+| **Editorial control** | Yes | No | **No** |
+| **User accounts** | Required | None | **None** |
+| **Central servers** | Yes | No | **No** |
+| **Legal status** | Publisher | Common carrier | **Common carrier** |
+
+As protocol-layer technology, RenegadeSwarm is functionally equivalent to other content-agnostic networking protocols and enjoys equivalent legal protections under the DMCA, Communications Decency Act, and common carrier doctrine.
+
 ---
 
 ## 2. Total Disclaimer of Warranties & Limitation of Liability
